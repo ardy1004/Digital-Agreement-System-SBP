@@ -10,7 +10,8 @@
     "db:migrate:referrals": "cd backend && npm run db:migrate:referrals",
     "db:migrate:referral-leads": "cd backend && npm run db:migrate:referral-leads",
     "build": "cd frontend && npm run build",
-    "setup": "npm install && cd backend && npm install && cd ../frontend && npm install && cd .. && npm run db:migrate"
+    "setup": "npm install && cd backend && npm install && cd ../frontend && npm install && cd .. && npm run db:migrate",
+    "deploy": "npm run build && cd backend && npx wrangler deploy"
   },
   "devDependencies": {
     "concurrently": "^9.1.0"

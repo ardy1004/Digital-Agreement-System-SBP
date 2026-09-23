@@ -35,11 +35,11 @@ const initialForm = {
   party2_description: 'Bertindak untuk dan atas nama perusahaan',
 
   // Pihak Kedua (Owner) → disimpan ke party1
-  party1_name: 'IR. DJONI HERDIWAN, MM',
-  party1_nik: '3173052309680009',
-  party1_address: 'Jl Anggrek No.27 RT 001/009, Kebon Jeruk, Jakarta Barat',
+  party1_name: '',
+  party1_nik: '',
+  party1_address: '',
   party1_contact: '0813-9127-8889',
-  party1_description: 'Bertindak sebagai salah satu ahli waris dan/atau perwakilan ahli waris yang sah',
+  party1_description: '',
 
   // Property
   property_title: 'Rumah Induk 4 Kamar + 16 Kamar Kost',

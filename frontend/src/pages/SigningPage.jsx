@@ -9,21 +9,12 @@ import { formatCurrency, getCurrentDateIndonesian } from '../utils/format';
 import { Loader2, Eraser, CheckCircle } from 'lucide-react';
 
 // Gunakan proxy path (/img-proxy) agar fetch tidak kena CORS restriction browser.
-// Vite dev server meneruskan /img-proxy/* ke https://images.salambumi.xyz/materai/*
-// di production (Cloudflare Pages / hosting), gambar di-embed via fetch server-side
-// atau CORS sudah allow origin production domain.
-const isDev = import.meta.env.DEV;
-
+// Dev: Vite meneruskan /img-proxy/* ke https://images.salambumi.xyz/materai/*;
+// production: Worker (backend/src/index.js) melakukan hal yang sama.
 const IMAGE_URLS = {
-  logo: isDev
-    ? '/img-proxy/fav.webp'
-    : 'https://images.salambumi.xyz/materai/fav.webp',
-  materai: isDev
-    ? '/img-proxy/hg.png'
-    : 'https://images.salambumi.xyz/materai/hg.png',
-  agentSignature: isDev
-    ? '/img-proxy/gsd-removebg-preview%20-%20Copy.png'
-    : 'https://images.salambumi.xyz/materai/gsd-removebg-preview%20-%20Copy.png',
+  logo: '/img-proxy/fav.webp',
+  materai: '/img-proxy/hg.png',
+  agentSignature: '/img-proxy/gsd-removebg-preview%20-%20Copy.png',
 };
 
 async function imageUrlToBase64(url) {
@@ -349,11 +340,11 @@ export default function SigningPage() {
             Yang bertindak sebagai <strong>Pihak Kedua</strong> dalam perjanjian ini adalah:
           </div>
           <div style={{ paddingLeft: 24, position: 'relative', zIndex: 1 }}>
-            <div style={{ textIndent: -12, marginBottom: 4 }}>a. Nama : {agreement?.party1_name || 'IR. DJONI HERDIWAN, MM'}</div>
-            <div style={{ textIndent: -12, marginBottom: 4 }}>b. NIK : {agreement?.party1_nik || '3173052309680009'}</div>
-            <div style={{ textIndent: -12, marginBottom: 4 }}>c. Alamat : {agreement?.party1_address || 'Jl Anggrek No.27 RT 001/009, Kebon Jeruk, Jakarta Barat'}</div>
+            <div style={{ textIndent: -12, marginBottom: 4 }}>a. Nama : {agreement?.party1_name || '-'}</div>
+            <div style={{ textIndent: -12, marginBottom: 4 }}>b. NIK : {agreement?.party1_nik || '-'}</div>
+            <div style={{ textIndent: -12, marginBottom: 4 }}>c. Alamat : {agreement?.party1_address || '-'}</div>
             <div style={{ textIndent: -12, marginBottom: 4 }}>d. Telepon : {agreement?.party1_contact || '0813-9127-8889'}</div>
-            <div style={{ textIndent: -12, marginBottom: 4 }}>e. Keterangan : {agreement?.party1_description || 'Bertindak sebagai salah satu ahli waris dan/atau perwakilan ahli waris yang sah'}</div>
+            <div style={{ textIndent: -12, marginBottom: 4 }}>e. Keterangan : {agreement?.party1_description || '-'}</div>
           </div>
 
           {/* PASAL 1 */}
@@ -516,9 +507,9 @@ export default function SigningPage() {
               </div>
 
               <div style={{ borderTop: '1px solid #333', paddingTop: 4, fontWeight: 'bold' }}>
-                {agreement?.party1_name || 'IR. DJONI HERDIWAN, MM'}
+                {agreement?.party1_name || '-'}
               </div>
-              <div style={{ fontSize: 9, color: '#666' }}>NIK: {agreement?.party1_nik || '3173052309680009'}</div>
+              <div style={{ fontSize: 9, color: '#666' }}>NIK: {agreement?.party1_nik || '-'}</div>
             </div>
 
           </div>

@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import { basicAuth } from 'hono/basic-auth';
 import referrals from './referrals.js';
 
 const app = new Hono();
@@ -9,6 +10,61 @@ app.use('*', cors({
   allowMethods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   allowHeaders: ['Content-Type', 'Authorization'],
 }));
+
+// Jalur yang boleh dibuka tanpa password: halaman & API tanda tangan, aset, proxy gambar.
+// Endpoint PDF per-id tetap publik: id berupa UUID acak dan penanda tangan sudah
+// menerimanya dari endpoint token (dipakai tombol "Unduh PDF" di halaman sukses).
+const PUBLIC_PATHS = [
+  /^\/(sign|success)\/[^/]+\/?$/,
+  /^\/referrals\/(sign|success)\/[^/]+\/?$/,
+  /^\/assets\//,
+  /^\/img-proxy\//,
+  /^\/(favicon|icons)\.svg$/,
+  /^\/api\/health$/,
+  /^\/api\/(agreements|referrals)\/(token|sign)\/[^/]+$/,
+  /^\/api\/(agreements|referrals)\/[^/]+\/pdf$/,
+];
+
+const isLocalHost = (host) => /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host || '');
+
+// Password admin (Basic Auth) untuk dashboard, form, dan API admin
+app.use('*', async (c, next) => {
+  if (PUBLIC_PATHS.some((re) => re.test(c.req.path))) return next();
+
+  const password = c.env.ADMIN_PASSWORD;
+  if (!password) {
+    // Lokal (npm run dev) boleh tanpa password; di production fail-closed
+    if (isLocalHost(new URL(c.req.url).host)) return next();
+    return c.text('Password admin belum diatur (ADMIN_PASSWORD).', 503);
+  }
+
+  return basicAuth({ username: 'admin', password, realm: 'SBP Perjanjian' })(c, next);
+});
+
+// Gambar logo / materai / tanda tangan SBP lewat origin sendiri, karena
+// images.salambumi.xyz tidak mengirim header CORS (sama seperti proxy di vite.config.js)
+app.get('/img-proxy/*', async (c) => {
+  const file = new URL(c.req.url).pathname.replace(/^\/img-proxy\//, '');
+  if (!file || file.includes('..')) {
+    return c.text('Not found', 404);
+  }
+
+  const upstream = await fetch('https://images.salambumi.xyz/materai/' + file, {
+    headers: { Referer: 'https://images.salambumi.xyz' },
+    cf: { cacheEverything: true, cacheTtl: 86400 },
+  });
+
+  if (!upstream.ok) {
+    return c.text('Image not found', upstream.status);
+  }
+
+  return new Response(upstream.body, {
+    headers: {
+      'Content-Type': upstream.headers.get('Content-Type') || 'application/octet-stream',
+      'Cache-Control': 'public, max-age=86400',
+    },
+  });
+});
 
 app.get('/api/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
@@ -251,6 +307,12 @@ app.get('/api/agreements/:id/pdf', async (c) => {
 
 // Perjanjian Kerja Sama Referal
 app.route('/api/referrals', referrals);
+
+// API yang tidak dikenal → 404 JSON (bukan halaman React)
+app.all('/api/*', (c) => c.json({ success: false, error: 'Not found' }, 404));
+
+// Selain API: sajikan frontend (build Vite); alamat halaman React jatuh ke index.html
+app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 
 function generateSecureToken() {
   const array = new Uint8Array(32);

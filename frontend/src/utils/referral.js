@@ -59,7 +59,7 @@ export function getLeads(referral) {
   }
 }
 
-export const PERCENT_WORDS ={ 20: 'dua puluh', 30: 'tiga puluh', 50: 'lima puluh' };
+export const PERCENT_WORDS = { 20: 'dua puluh', 30: 'tiga puluh', 50: 'lima puluh' };
 
 export const CONSENT_ITEMS = [
   'Saya menyatakan bahwa data dan informasi yang saya berikan adalah benar.',
@@ -68,19 +68,11 @@ export const CONSENT_ITEMS = [
   'Saya akan menjaga kerahasiaan seluruh informasi terkait transaksi ini.',
 ];
 
-// Disalin dari SigningPage.jsx (perjanjian owner) agar halaman owner tidak berubah.
-const isDev = import.meta.env.DEV;
-
+// Gambar diambil lewat /img-proxy di origin sendiri (Vite proxy saat dev, Worker di production)
 export const IMAGE_URLS = {
-  logo: isDev
-    ? '/img-proxy/fav.webp'
-    : 'https://images.salambumi.xyz/materai/fav.webp',
-  materai: isDev
-    ? '/img-proxy/hg.png'
-    : 'https://images.salambumi.xyz/materai/hg.png',
-  agentSignature: isDev
-    ? '/img-proxy/gsd-removebg-preview%20-%20Copy.png'
-    : 'https://images.salambumi.xyz/materai/gsd-removebg-preview%20-%20Copy.png',
+  logo: '/img-proxy/fav.webp',
+  materai: '/img-proxy/hg.png',
+  agentSignature: '/img-proxy/gsd-removebg-preview%20-%20Copy.png',
 };
 
 export async function imageUrlToBase64(url) {

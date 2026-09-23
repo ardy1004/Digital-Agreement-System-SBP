@@ -1,13 +1,29 @@
-name = "sbp-agreements"
+name = "sbp-perjanjian"
 main = "src/index.js"
 compatibility_date = "2026-03-24"
 compatibility_flags = ["nodejs_compat"]
 
+# Harus di atas semua [tabel] — kalau di bawah [assets], TOML menganggapnya assets.routes
+routes = [
+  { pattern = "perjanjian.salambumi.xyz", custom_domain = true }
+]
+
+# Satu Worker menyajikan frontend (build Vite) sekaligus API.
+# Worker jalan lebih dulu untuk semua request supaya password admin & proxy gambar berlaku.
+[assets]
+directory = "../frontend/dist"
+binding = "ASSETS"
+not_found_handling = "single-page-application"
+run_worker_first = true
+
+# ⚠️ Database KHUSUS aplikasi perjanjian. JANGAN PERNAH diarahkan ke "sbp-db":
+# itu database website salambumi.xyz, dan migrasi 0001 di sini diawali
+# DROP TABLE agreements — salah target = perjanjian website terhapus.
 [[d1_databases]]
 binding = "DB"
-database_name = "sbp-db"
-database_id = "bc35510c-f38f-45e3-8ef5-d70200399a4e"
+database_name = "sbp-perjanjian-db"
+database_id = "519402fe-5489-43c7-85ee-aee96c431a5e"
 
 [[r2_buckets]]
 binding = "R2"
-bucket_name = "sbp-files"
+bucket_name = "sbp-perjanjian-files"
