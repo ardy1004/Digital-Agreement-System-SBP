@@ -1,0 +1,243 @@
+@import "tailwindcss";
+
+@layer base {
+  body {
+    font-family: 'Georgia', 'Times New Roman', serif;
+    -webkit-font-smoothing: antialiased;
+    background: #f3f4f6;
+  }
+}
+
+@layer components {
+  /* A4 Document - Fixed Layout for PDF consistency */
+  .a4-document {
+    width: 210mm;
+    min-height: 297mm;
+    background: white;
+    padding: 40px;
+    margin: 0 auto;
+    font-family: 'Times New Roman', Georgia, serif;
+    font-size: 12pt;
+    line-height: 1.6;
+    color: #1a1a1a;
+    box-sizing: border-box;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .a4-document-print {
+    width: 210mm;
+    min-height: 297mm;
+    background: white;
+    padding: 40px;
+    font-family: 'Times New Roman', Georgia, serif;
+    font-size: 12pt;
+    line-height: 1.6;
+    color: #1a1a1a;
+    box-sizing: border-box;
+    position: relative;
+  }
+
+  /* Header */
+  .doc-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 8px;
+  }
+
+  .doc-logo {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: #1e40af;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: bold;
+    font-size: 10pt;
+    flex-shrink: 0;
+  }
+
+  .doc-company-info {
+    flex: 1;
+  }
+
+  .doc-company-name {
+    font-size: 16pt;
+    font-weight: bold;
+    color: #1e40af;
+    margin: 0;
+  }
+
+  .doc-company-detail {
+    font-size: 9pt;
+    color: #666;
+    margin: 2px 0 0 0;
+    line-height: 1.4;
+  }
+
+  /* Separator */
+  .doc-separator {
+    border: none;
+    border-top: 3px solid #1e40af;
+    margin: 4px 0 20px 0;
+    position: relative;
+  }
+
+  .doc-separator::after {
+    content: '';
+    display: block;
+    border-top: 1px solid #1e40af;
+    margin-top: 2px;
+  }
+
+  /* Title */
+  .doc-title {
+    text-align: center;
+    font-size: 14pt;
+    font-weight: bold;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin: 20px 0 4px 0;
+  }
+
+  .doc-number {
+    text-align: center;
+    font-size: 11pt;
+    margin-bottom: 20px;
+  }
+
+  /* Sections */
+  .doc-section {
+    margin-bottom: 12px;
+    text-align: justify;
+  }
+
+  .doc-pasal {
+    font-weight: bold;
+    font-size: 11pt;
+    margin: 16px 0 8px 0;
+    text-transform: uppercase;
+  }
+
+  .doc-clause {
+    padding-left: 24px;
+    text-indent: -12px;
+    margin-bottom: 4px;
+  }
+
+  .doc-indent {
+    padding-left: 24px;
+  }
+
+  /* Signature Area */
+  .doc-signature-section {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 40px;
+    page-break-inside: avoid;
+  }
+
+  .doc-signature-box {
+    width: 45%;
+    text-align: center;
+  }
+
+  .doc-signature-label {
+    font-weight: bold;
+    margin-bottom: 4px;
+  }
+
+  .doc-signature-subtitle {
+    font-size: 10pt;
+    margin-bottom: 60px;
+  }
+
+  .doc-signature-area {
+    position: relative;
+    width: 150px;
+    height: 150px;
+    margin: 0 auto 8px auto;
+  }
+
+  .doc-materai {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 150px;
+    height: 150px;
+    border: 1px dashed #999;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background: #fafafa;
+    pointer-events: none;
+  }
+
+  .doc-materai-text {
+    font-size: 9pt;
+    color: #999;
+    font-weight: bold;
+  }
+
+  .doc-materai-value {
+    font-size: 7pt;
+    color: #999;
+  }
+
+  .doc-signature-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 150px;
+    height: 150px;
+    z-index: 10;
+    cursor: crosshair;
+  }
+
+  .doc-signature-name {
+    font-weight: bold;
+    border-top: 1px solid #333;
+    padding-top: 4px;
+    margin-top: 4px;
+  }
+
+  /* Footer */
+  .doc-footer {
+    position: absolute;
+    bottom: 20px;
+    left: 40px;
+    right: 40px;
+    text-align: center;
+    font-size: 8pt;
+    color: #999;
+    border-top: 1px solid #e5e7eb;
+    padding-top: 8px;
+  }
+
+  /* Watermark */
+  .doc-watermark {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) rotate(-45deg);
+    font-size: 48pt;
+    color: rgba(0, 0, 0, 0.03);
+    font-weight: bold;
+    white-space: nowrap;
+    pointer-events: none;
+    z-index: 0;
+  }
+}
+
+@media print {
+  .a4-document {
+    box-shadow: none;
+    border: none;
+    margin: 0;
+  }
+}

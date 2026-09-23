@@ -1,0 +1,9 @@
+node_modules/
+dist/
+*.log
+*.tsbuildinfo
+
+# Wrangler local state (berisi database lokal & file R2 dengan data pribadi)
+.wrangler/
+.dev.vars
+.env*

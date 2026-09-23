@@ -1,0 +1,13 @@
+name = "sbp-agreements"
+main = "src/index.js"
+compatibility_date = "2026-03-24"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "sbp-db"
+database_id = "bc35510c-f38f-45e3-8ef5-d70200399a4e"
+
+[[r2_buckets]]
+binding = "R2"
+bucket_name = "sbp-files"

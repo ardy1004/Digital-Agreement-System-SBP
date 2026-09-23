@@ -429,6 +429,7 @@ export default function SigningPage() {
             marginTop: 40,
             position: 'relative',
             zIndex: 1,
+            overflow: 'visible',
           }}>
 
             {/* ── KOLOM KIRI — PIHAK PERTAMA (AGEN) ── */}
@@ -462,59 +463,50 @@ export default function SigningPage() {
               <div style={{ fontSize: 9, color: '#666' }}>{agreement?.party2_company || 'CV Salam Bumi Property'}</div>
             </div>
 
-            {/* ── KOLOM TENGAH — MATERAI ── */}
-            <div style={{
-              width: '16%',
-              display: 'flex',
-              justifyContent: 'flex-end',
-              alignItems: 'flex-end',
-              paddingRight: 0,
-              paddingBottom: 52,
-            }}>
-              {images.materai ? (
-                <img
-                  src={images.materai}
-                  alt="Materai"
-                  style={{
-                    width: 140,
-                    height: 'auto',
-                    display: 'block',
-                    pointerEvents: 'none',
-                    marginRight: -18,
-                  }}
-                />
-              ) : (
-                <div style={{
-                  width: 140, height: 140,
-                  border: '2px dashed #ccc',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  marginRight: -18,
-                }}>
-                  <span style={{ color: '#aaa', fontSize: 9, fontWeight: 'bold' }}>MATERAI</span>
-                </div>
-              )}
-            </div>
+            {/* ── KOLOM TENGAH — (spacer, materai dipindah ke kolom kanan) ── */}
+            <div style={{ width: '16%' }} />
 
             {/* ── KOLOM KANAN — PIHAK KEDUA (PEMILIK) ── */}
-            <div style={{ width: '42%', textAlign: 'center' }}>
+            <div style={{ width: '42%', textAlign: 'center', position: 'relative', overflow: 'visible' }}>
               <div style={{ fontWeight: 'bold', marginBottom: 4 }}>PIHAK KEDUA</div>
               <div style={{ fontSize: 10, marginBottom: 8 }}>(Pemilik)</div>
 
-              {/* Area tanda tangan pemilik: transparan, tinggi 120px, canvas bebas */}
-              <div style={{ position: 'relative', width: '100%', height: 120, marginBottom: 8 }}>
+              {/* Area tanda tangan: materai di bawah canvas, canvas di atas sebagai overlay */}
+              <div style={{ position: 'relative', width: '100%', height: 120, marginBottom: 8, overflow: 'visible' }}>
+
+                {/* Materai — di dalam kolom kanan, zIndex di bawah canvas agar bisa ditimpa tanda tangan */}
+                {images.materai && (
+                  <img
+                    src={images.materai}
+                    alt="Materai"
+                    style={{
+                      width: 160,
+                      height: 'auto',
+                      display: 'block',
+                      pointerEvents: 'none',
+                      position: 'absolute',
+                      bottom: 0,
+                      left: '50%',
+                      transform: 'translateX(-110%)',
+                      zIndex: 10,
+                    }}
+                  />
+                )}
+
+                {/* Canvas tanda tangan — di atas materai */}
                 <SignatureCanvas
                   ref={sigCanvasRef}
                   penColor="#1a1a1a"
                   canvasProps={{
-                    width: 300,
-                    height: 120,
+                    width: 430,
+                    height: 180,
                     style: {
                       position: 'absolute',
-                      top: 0,
-                      left: 0,
-                      width: '100%',
-                      height: '100%',
-                      zIndex: 10,
+                      top: '-60px',
+                      left: '-130px',
+                      width: 'calc(100% + 130px)',
+                      height: 'calc(100% + 60px)',
+                      zIndex: 20,
                       cursor: 'crosshair',
                       background: 'transparent',
                     },

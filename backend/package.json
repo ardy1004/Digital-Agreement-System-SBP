@@ -1,0 +1,21 @@
+{
+  "name": "backend",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "db:migrate": "wrangler d1 execute sbp-db --local --file=./migrations/0001_initial.sql",
+    "db:migrate:prod": "wrangler d1 execute sbp-db --remote --file=./migrations/0001_initial.sql"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "hono": "^4.12.9"
+  },
+  "devDependencies": {
+    "wrangler": "^4.77.0"
+  }
+}
