@@ -8,6 +8,7 @@
     "dev:frontend": "cd frontend && npm run dev",
     "db:migrate": "cd backend && npm run db:migrate",
     "db:migrate:referrals": "cd backend && npm run db:migrate:referrals",
+    "db:migrate:referral-leads": "cd backend && npm run db:migrate:referral-leads",
     "build": "cd frontend && npm run build",
     "setup": "npm install && cd backend && npm install && cd ../frontend && npm install && cd .. && npm run db:migrate"
   },

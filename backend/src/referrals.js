@@ -10,11 +10,24 @@ const REFERRAL_SPLITS = {
 const EDITABLE_FIELDS = [
   'sbp_name', 'sbp_company', 'sbp_address', 'sbp_contact', 'sbp_description',
   'partner_name', 'partner_nik', 'partner_address', 'partner_contact',
-  'lead_buyer_name', 'lead_buyer_contact', 'lead_buyer_need',
-  'lead_property_title', 'lead_property_address', 'lead_property_land_area',
-  'lead_property_building_area', 'lead_property_legal', 'lead_owner_name', 'lead_owner_contact',
   'additional_clause',
 ];
+
+// Isian per item leads (opsional, bisa lebih dari satu) — sama dengan LEAD_FIELDS di frontend
+const LEAD_KEYS = {
+  buyer: ['name', 'contact', 'need'],
+  seller: ['title', 'address', 'land_area', 'building_area', 'legal', 'owner_name', 'owner_contact'],
+};
+
+// Ambil hanya key yang dikenal, buang item yang kosong semua; null jika tidak ada leads
+function normalizeLeads(type, leads) {
+  if (!Array.isArray(leads)) return null;
+  const keys = LEAD_KEYS[type];
+  const clean = leads
+    .map((lead) => Object.fromEntries(keys.map((k) => [k, String(lead?.[k] ?? '').trim()])))
+    .filter((lead) => keys.some((k) => lead[k]));
+  return clean.length ? JSON.stringify(clean) : null;
+}
 
 const referrals = new Hono();
 
@@ -81,12 +94,13 @@ referrals.post('/', async (c) => {
   await env.DB.prepare(`
     INSERT INTO referral_agreements (
       id, token, agreement_number, status,
-      referral_type, referral_percent, agent_percent, office_percent,
+      referral_type, referral_percent, agent_percent, office_percent, leads,
       ${EDITABLE_FIELDS.join(', ')}
-    ) VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ${EDITABLE_FIELDS.map(() => '?').join(', ')})
+    ) VALUES (?, ?, ?, 'draft', ?, ?, ?, ?, ?, ${EDITABLE_FIELDS.map(() => '?').join(', ')})
   `).bind(
     id, token, agreementNumber,
     body.referral_type, split[0], split[1], split[2],
+    normalizeLeads(body.referral_type, body.leads),
     ...values
   ).run();
 
@@ -116,12 +130,13 @@ referrals.put('/:id', async (c) => {
 
   await env.DB.prepare(`
     UPDATE referral_agreements SET
-      referral_type = ?, referral_percent = ?, agent_percent = ?, office_percent = ?,
+      referral_type = ?, referral_percent = ?, agent_percent = ?, office_percent = ?, leads = ?,
       ${EDITABLE_FIELDS.map((f) => `${f} = ?`).join(', ')},
       updated_at = datetime('now')
     WHERE id = ?
   `).bind(
     body.referral_type, split[0], split[1], split[2],
+    normalizeLeads(body.referral_type, body.leads),
     ...EDITABLE_FIELDS.map((f) => body[f] || null),
     id
   ).run();

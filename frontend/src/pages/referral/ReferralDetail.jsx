@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { referralApi } from '../../utils/api';
 import { formatDate, formatDateTime, getStatusBadge } from '../../utils/format';
-import { getReferralTypeLabel } from '../../utils/referral';
+import { getReferralTypeLabel, getLeads, getLeadTitle, LEAD_FIELDS } from '../../utils/referral';
 import { ArrowLeft, Copy, Send, Download, ExternalLink, CheckCircle, Clock, FileText, Building2, User, PieChart, Landmark } from 'lucide-react';
 
 function DetailRow({ label, value }) {
@@ -91,6 +91,7 @@ export default function ReferralDetail() {
   const badge = getStatusBadge(referral.status);
   const pdfUrl = referral.status === 'signed' ? referralApi.getPdfUrl(id) : null;
   const isBuyer = referral.referral_type === 'buyer';
+  const leads = getLeads(referral);
   const waText = signingUrl
     ? encodeURIComponent(`Halo ${referral.partner_name || ''}, berikut link Perjanjian Kerja Sama Referal dari CV Salam Bumi Property. Mohon dibaca, isi data rekening, centang persetujuan, lalu tanda tangan:\n${signingUrl}`)
     : '';
@@ -170,25 +171,21 @@ export default function ReferralDetail() {
             </div>
           </Card>
 
-          <Card icon={FileText} title={isBuyer ? 'Data Leads Pembeli' : 'Data Properti yang Dijual'}>
-            <div className="px-6 py-5 divide-y divide-gray-100">
-              {isBuyer ? (
-                <>
-                  <DetailRow label="Nama Calon Pembeli" value={referral.lead_buyer_name} />
-                  <DetailRow label="No. HP Calon Pembeli" value={referral.lead_buyer_contact} />
-                  <DetailRow label="Properti yang Dicari" value={referral.lead_buyer_need && <span className="whitespace-pre-wrap">{referral.lead_buyer_need}</span>} />
-                </>
-              ) : (
-                <>
-                  <DetailRow label="Jenis Properti" value={referral.lead_property_title} />
-                  <DetailRow label="Alamat" value={referral.lead_property_address} />
-                  <DetailRow label="Luas Tanah" value={referral.lead_property_land_area ? `${referral.lead_property_land_area} m²` : '-'} />
-                  <DetailRow label="Luas Bangunan" value={referral.lead_property_building_area ? `${referral.lead_property_building_area} m²` : '-'} />
-                  <DetailRow label="Legalitas" value={referral.lead_property_legal} />
-                  <DetailRow label="Nama Pemilik" value={referral.lead_owner_name} />
-                  <DetailRow label="No. HP Pemilik" value={referral.lead_owner_contact} />
-                </>
-              )}
+          <Card icon={FileText} title={`${getLeadTitle(referral.referral_type)} (${leads.length})`}>
+            <div className="px-6 py-5 space-y-5">
+              {leads.length === 0 ? (
+                <p className="text-sm text-gray-500">Tidak ada data yang dilampirkan.</p>
+              ) : leads.map((lead, index) => (
+                <div key={index}>
+                  <div className="text-xs font-semibold text-gray-700 mb-2">{isBuyer ? 'Leads' : 'Properti'} {index + 1}</div>
+                  <div className="divide-y divide-gray-100">
+                    {LEAD_FIELDS[referral.referral_type].map((f) => (
+                      <DetailRow key={f.key} label={f.label}
+                        value={lead[f.key] && <span className="whitespace-pre-wrap">{lead[f.key]}</span>} />
+                    ))}
+                  </div>
+                </div>
+              ))}
             </div>
           </Card>
 

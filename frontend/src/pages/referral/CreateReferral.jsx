@@ -2,16 +2,8 @@ import { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router-dom';
 import { referralApi } from '../../utils/api';
-import { REFERRAL_SPLITS } from '../../utils/referral';
-import { ArrowLeft, Building2, User, FileText, Save, PieChart } from 'lucide-react';
-
-const LEGAL_OPTIONS = [
-  { value: 'SHM', label: 'Sertifikat Hak Milik (SHM)' },
-  { value: 'HGB', label: 'Hak Guna Bangunan (HGB)' },
-  { value: 'SHGB', label: 'SHGB' },
-  { value: 'Girik', label: 'Girik' },
-  { value: 'AJB', label: 'AJB' },
-];
+import { REFERRAL_SPLITS, LEAD_FIELDS, emptyLead, isLeadEmpty, getLeadTitle } from '../../utils/referral';
+import { ArrowLeft, Building2, User, FileText, Save, PieChart, Plus, Trash2 } from 'lucide-react';
 
 const initialForm = {
   // Pihak Pertama (SBP)
@@ -29,28 +21,8 @@ const initialForm = {
 
   referral_type: 'buyer',
 
-  // Leads Pembeli
-  lead_buyer_name: '',
-  lead_buyer_contact: '',
-  lead_buyer_need: '',
-
-  // Leads Penjual
-  lead_property_title: '',
-  lead_property_address: '',
-  lead_property_land_area: '',
-  lead_property_building_area: '',
-  lead_property_legal: '',
-  lead_owner_name: '',
-  lead_owner_contact: '',
-
   additional_clause: '',
 };
-
-const BUYER_FIELDS = ['lead_buyer_name', 'lead_buyer_contact', 'lead_buyer_need'];
-const SELLER_FIELDS = [
-  'lead_property_title', 'lead_property_address', 'lead_property_land_area',
-  'lead_property_building_area', 'lead_property_legal', 'lead_owner_name', 'lead_owner_contact',
-];
 
 function Input({ label, name, value, onChange, type = 'text', placeholder, required, error, ...rest }) {
   return (
@@ -108,6 +80,8 @@ export default function CreateReferral() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState(initialForm);
   const [errors, setErrors] = useState({});
+  // Leads disimpan terpisah per jenis agar tidak hilang saat toggle diganti
+  const [leads, setLeads] = useState({ buyer: [], seller: [] });
 
   const mutation = useMutation({
     mutationFn: (data) => referralApi.create(data),
@@ -126,17 +100,18 @@ export default function CreateReferral() {
 
   const setType = (type) => setForm((p) => ({ ...p, referral_type: type }));
 
+  const addLead = () => setLeads((p) => ({ ...p, [form.referral_type]: [...p[form.referral_type], emptyLead(form.referral_type)] }));
+  const removeLead = (index) => setLeads((p) => ({ ...p, [form.referral_type]: p[form.referral_type].filter((_, i) => i !== index) }));
+  const updateLead = (index, key, value) => setLeads((p) => ({
+    ...p,
+    [form.referral_type]: p[form.referral_type].map((lead, i) => (i === index ? { ...lead, [key]: value } : lead)),
+  }));
+
   const validate = () => {
     const e = {};
     if (!form.sbp_name.trim()) e.sbp_name = 'Wajib diisi';
     if (!form.partner_name.trim()) e.partner_name = 'Wajib diisi';
     if (!form.partner_nik.trim()) e.partner_nik = 'Wajib diisi';
-    if (form.referral_type === 'buyer') {
-      if (!form.lead_buyer_name.trim()) e.lead_buyer_name = 'Wajib diisi';
-    } else {
-      if (!form.lead_property_title.trim()) e.lead_property_title = 'Wajib diisi';
-      if (!form.lead_property_address.trim()) e.lead_property_address = 'Wajib diisi';
-    }
     setErrors(e);
     return Object.keys(e).length === 0;
   };
@@ -144,15 +119,14 @@ export default function CreateReferral() {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!validate()) return;
-    // Kosongkan field leads milik jenis lain agar data tidak tercampur
-    const data = { ...form };
-    const unused = form.referral_type === 'buyer' ? SELLER_FIELDS : BUYER_FIELDS;
-    unused.forEach((f) => { data[f] = ''; });
-    mutation.mutate(data);
+    // Hanya kirim leads milik jenis yang dipilih, dan buang form yang kosong
+    const typeLeads = leads[form.referral_type].filter((lead) => !isLeadEmpty(lead));
+    mutation.mutate({ ...form, leads: typeLeads });
   };
 
   const split = REFERRAL_SPLITS[form.referral_type];
   const isBuyer = form.referral_type === 'buyer';
+  const currentLeads = leads[form.referral_type];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -237,33 +211,47 @@ export default function CreateReferral() {
           </Section>
 
           {/* Data Leads */}
-          <Section icon={<FileText size={20} />} iconClass="bg-purple-50 text-purple-600" title={isBuyer ? 'Data Leads Pembeli' : 'Data Properti yang Dijual'}>
-            {isBuyer ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <Input label="Nama Calon Pembeli" name="lead_buyer_name" value={form.lead_buyer_name} onChange={handleChange} required error={errors.lead_buyer_name} />
-                <Input label="No. HP Calon Pembeli" name="lead_buyer_contact" value={form.lead_buyer_contact} onChange={handleChange} />
-                <div className="sm:col-span-2">
-                  <TextArea label="Properti yang Dicari / Diminati" name="lead_buyer_need" value={form.lead_buyer_need} onChange={handleChange}
-                    placeholder="Contoh: Rumah di Sleman, 3 kamar, budget sekitar Rp 1 M" />
+          <Section icon={<FileText size={20} />} iconClass="bg-purple-50 text-purple-600" title={`${getLeadTitle(form.referral_type)} (opsional)`}>
+            <p className="text-xs text-gray-500 mb-4">
+              Tidak wajib. Jika diisi, data akan dicetak sebagai Lampiran perjanjian. Leads berikutnya yang datang setelah perjanjian dikirim cukup dicatat di luar sistem.
+            </p>
+
+            <div className="space-y-4">
+              {currentLeads.map((lead, index) => (
+                <div key={index} className="rounded-lg border border-gray-200 p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <span className="text-sm font-semibold text-gray-700">{isBuyer ? 'Leads' : 'Properti'} {index + 1}</span>
+                    <button type="button" onClick={() => removeLead(index)}
+                      className="inline-flex items-center gap-1 px-2 py-1 text-xs text-red-600 hover:bg-red-50 rounded-md">
+                      <Trash2 size={14} /> Hapus
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {LEAD_FIELDS[form.referral_type].map((f) => {
+                      const name = `${form.referral_type}-${index}-${f.key}`;
+                      const onChange = (e) => updateLead(index, f.key, e.target.value);
+                      const wide = f.wide || f.multiline;
+                      return (
+                        <div key={f.key} className={wide ? 'sm:col-span-2' : ''}>
+                          {f.options ? (
+                            <Select label={f.label} name={name} value={lead[f.key]} onChange={onChange} options={f.options} />
+                          ) : f.multiline ? (
+                            <TextArea label={f.label} name={name} value={lead[f.key]} onChange={onChange} placeholder={f.placeholder} />
+                          ) : (
+                            <Input label={f.label} name={name} value={lead[f.key]} onChange={onChange} placeholder={f.placeholder} />
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="sm:col-span-2">
-                  <Input label="Jenis Properti" name="lead_property_title" value={form.lead_property_title} onChange={handleChange} required error={errors.lead_property_title}
-                    placeholder="Contoh: Rumah 2 lantai, Tanah pekarangan" />
-                </div>
-                <div className="sm:col-span-2">
-                  <Input label="Alamat Properti" name="lead_property_address" value={form.lead_property_address} onChange={handleChange} required error={errors.lead_property_address} />
-                </div>
-                <Input label="Luas Tanah (m²)" name="lead_property_land_area" value={form.lead_property_land_area} onChange={handleChange} />
-                <Input label="Luas Bangunan (m²)" name="lead_property_building_area" value={form.lead_property_building_area} onChange={handleChange} />
-                <Select label="Legalitas" name="lead_property_legal" value={form.lead_property_legal} onChange={handleChange} options={LEGAL_OPTIONS} />
-                <div />
-                <Input label="Nama Pemilik Properti" name="lead_owner_name" value={form.lead_owner_name} onChange={handleChange} />
-                <Input label="No. HP Pemilik Properti" name="lead_owner_contact" value={form.lead_owner_contact} onChange={handleChange} />
-              </div>
-            )}
+              ))}
+            </div>
+
+            <button type="button" onClick={addLead}
+              className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-lg border border-dashed border-blue-400 text-sm font-medium text-blue-700 bg-blue-50/50 hover:bg-blue-50 ${currentLeads.length ? 'mt-4' : ''}`}>
+              <Plus size={16} /> {isBuyer ? 'Tambah Data Leads' : 'Tambah Data Properti'}
+            </button>
           </Section>
 
           {/* Klausul Tambahan */}

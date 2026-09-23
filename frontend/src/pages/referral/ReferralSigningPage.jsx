@@ -6,7 +6,7 @@ import { referralApi } from '../../utils/api';
 import { getCurrentDateIndonesian } from '../../utils/format';
 import {
   CONSENT_ITEMS, IMAGE_URLS, PERCENT_WORDS,
-  getReferralTypeLabel, imageUrlToBase64, generatePdfBase64,
+  getReferralTypeLabel, imageUrlToBase64, generatePdfBase64, getLeads,
 } from '../../utils/referral';
 import { Loader2, Eraser, CheckCircle, AlertTriangle } from 'lucide-react';
 
@@ -50,14 +50,14 @@ function Watermark() {
   );
 }
 
-function Footer({ page }) {
+function Footer({ page, total }) {
   return (
     <div style={{
       position: 'absolute', bottom: 20, left: 40, right: 40,
       textAlign: 'center', fontSize: 8, color: '#999',
       borderTop: '1px solid #e5e7eb', paddingTop: 8, zIndex: 1,
     }}>
-      Dokumen ini dibuat secara digital melalui SBP Digital Agreement System — Halaman {page} dari 2
+      Dokumen ini dibuat secara digital melalui SBP Digital Agreement System — Halaman {page} dari {total}
     </div>
   );
 }
@@ -80,6 +80,7 @@ export default function ReferralSigningPage() {
   const sigCanvasRef = useRef(null);
   const page1Ref = useRef(null);
   const page2Ref = useRef(null);
+  const page3Ref = useRef(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasSignature, setHasSignature] = useState(false);
   const [images, setImages] = useState({ logo: null, materai: null, agentSignature: null });
@@ -128,6 +129,10 @@ export default function ReferralSigningPage() {
 
   const toggleConsent = (i) => setConsents((p) => p.map((v, idx) => (idx === i ? !v : v)));
 
+  const leads = getLeads(referral);
+  const hasLeads = leads.length > 0;
+  const totalPages = hasLeads ? 3 : 2;
+
   const bankComplete = bank.bank_name.trim() && bank.bank_account_number.trim() && bank.bank_account_holder.trim();
   const allConsented = consents.every(Boolean);
   const canSubmit = bankComplete && allConsented && hasSignature && !isProcessing;
@@ -142,7 +147,8 @@ export default function ReferralSigningPage() {
       return;
     }
 
-    const pages = [page1Ref.current, page2Ref.current];
+    // Halaman 3 (Lampiran) hanya ada jika ada data leads / properti
+    const pages = [page1Ref.current, page2Ref.current, ...(hasLeads ? [page3Ref.current] : [])];
     if (pages.some((p) => !p)) {
       alert('Dokumen belum siap, silakan tunggu sebentar lalu coba lagi.');
       return;
@@ -357,34 +363,16 @@ export default function ReferralSigningPage() {
           <div style={S.heading}>PASAL 1 - RUANG LINGKUP</div>
           <div style={S.para}>
             Perjanjian ini merupakan kerja sama <strong>{getReferralTypeLabel(referral.referral_type)}</strong>, yaitu{' '}
-            {isBuyer
-              ? 'Pihak Kedua memberikan informasi dan/atau data calon pembeli (leads) kepada Pihak Pertama, dan selanjutnya Pihak Pertama memproses leads tersebut hingga terjadi transaksi jual beli properti.'
+              {isBuyer
+              ? 'Pihak Kedua memberikan informasi dan/atau data calon pembeli properti kepada Pihak Pertama, dan selanjutnya Pihak Pertama memproses informasi tersebut hingga terjadi transaksi jual beli properti.'
               : 'Pihak Kedua memberikan informasi dan/atau data properti yang akan dijual kepada Pihak Pertama, dan selanjutnya Pihak Pertama memproses pemasaran properti tersebut hingga terjadi transaksi jual beli (AJB).'}
+            {hasLeads && (isBuyer
+              ? ' Data calon pembeli yang diberikan pada saat perjanjian ini dibuat tercantum dalam Lampiran perjanjian ini.'
+              : ' Data properti yang diberikan pada saat perjanjian ini dibuat tercantum dalam Lampiran perjanjian ini.')}
           </div>
 
           {/* PASAL 2 */}
-          <div style={S.heading}>PASAL 2 - {isBuyer ? 'DATA CALON PEMBELI' : 'DATA PROPERTI'}</div>
-          <div style={S.para}>Informasi yang diberikan oleh Pihak Kedua adalah sebagai berikut:</div>
-          <div style={S.list}>
-            {isBuyer ? (
-              <>
-                <div style={S.item}>a. Nama Calon Pembeli : {referral.lead_buyer_name}</div>
-                <div style={S.item}>b. No. HP : {referral.lead_buyer_contact || '-'}</div>
-                <div style={S.item}>c. Properti yang Dicari : {referral.lead_buyer_need || '-'}</div>
-              </>
-            ) : (
-              <>
-                <div style={S.item}>a. Jenis Properti : {referral.lead_property_title}</div>
-                <div style={S.item}>b. Alamat : {referral.lead_property_address}</div>
-                <div style={S.item}>c. Luas Tanah / Bangunan : {referral.lead_property_land_area || '-'} m² / {referral.lead_property_building_area || '-'} m²</div>
-                <div style={S.item}>d. Legalitas : {referral.lead_property_legal || '-'}</div>
-                <div style={S.item}>e. Pemilik : {referral.lead_owner_name || '-'}{referral.lead_owner_contact ? ` (${referral.lead_owner_contact})` : ''}</div>
-              </>
-            )}
-          </div>
-
-          {/* PASAL 3 */}
-          <div style={S.heading}>PASAL 3 - FEE REFERAL</div>
+          <div style={S.heading}>PASAL 2 - FEE REFERAL</div>
           <div style={S.para}>
             Apabila informasi yang diberikan Pihak Kedua menghasilkan transaksi, maka total nilai fee yang didapat SBP dari transaksi tersebut dibagi dengan komposisi sebagai berikut:
           </div>
@@ -412,15 +400,15 @@ export default function ReferralSigningPage() {
             Dengan demikian, Pihak Kedua berhak atas Fee Referal sebesar <strong>{pct}% ({PERCENT_WORDS[pct] || pct} persen) dari total nilai fee yang didapat SBP</strong>.
           </div>
 
-          <Footer page={1} />
+          <Footer page={1} total={totalPages} />
         </div>
 
         {/* ====== HALAMAN 2 (MASUK PDF) ====== */}
         <div ref={page2Ref} style={S.page}>
           <Watermark />
 
-          {/* PASAL 4 */}
-          <div style={{ ...S.heading, marginTop: 0 }}>PASAL 4 - PEMBAYARAN FEE REFERAL</div>
+          {/* PASAL 3 */}
+          <div style={{ ...S.heading, marginTop: 0 }}>PASAL 3 - PEMBAYARAN FEE REFERAL</div>
           <div style={S.list}>
             <div style={S.item}>a. Fee Referal dibayarkan setelah transaksi selesai (AJB) dan fee telah diterima oleh SBP.</div>
             <div style={S.item}>b. Fee Referal dibayarkan melalui transfer ke rekening Pihak Kedua berikut:</div>
@@ -436,18 +424,18 @@ export default function ReferralSigningPage() {
             <div style={S.item}>c. Apabila transaksi tidak terjadi atau batal, Pihak Kedua tidak berhak atas Fee Referal.</div>
           </div>
 
-          {/* PASAL 5 */}
-          <div style={S.heading}>PASAL 5 - KEWAJIBAN PIHAK KEDUA</div>
+          {/* PASAL 4 */}
+          <div style={S.heading}>PASAL 4 - KEWAJIBAN PIHAK KEDUA</div>
           <div style={S.list}>
             <div style={S.item}>a. Memberikan informasi dan data yang benar kepada Pihak Pertama.</div>
             <div style={S.item}>b. Tidak menghubungi atau bertransaksi langsung dengan pihak terkait atas objek referal ini tanpa melalui Pihak Pertama.</div>
             <div style={S.item}>c. Menjaga kerahasiaan seluruh informasi terkait transaksi ini.</div>
           </div>
 
-          {/* PASAL 6 (opsional) */}
+          {/* PASAL 5 (opsional) */}
           {referral.additional_clause && (
             <>
-              <div style={S.heading}>PASAL 6 - KETENTUAN TAMBAHAN</div>
+              <div style={S.heading}>PASAL 5 - KETENTUAN TAMBAHAN</div>
               <div style={{ ...S.para, whiteSpace: 'pre-wrap' }}>{referral.additional_clause}</div>
             </>
           )}
@@ -522,8 +510,48 @@ export default function ReferralSigningPage() {
             </div>
           </div>
 
-          <Footer page={2} />
+          <Footer page={2} total={totalPages} />
         </div>
+
+        {/* ====== HALAMAN 3 — LAMPIRAN (MASUK PDF, hanya jika ada data) ====== */}
+        {hasLeads && (
+          <div ref={page3Ref} style={S.page}>
+            <Watermark />
+            <div style={{ textAlign: 'center', fontWeight: 'bold', fontSize: 14, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 4, ...S.layer }}>
+              LAMPIRAN
+            </div>
+            <div style={{ textAlign: 'center', fontSize: 11, marginBottom: 20, ...S.layer }}>
+              {isBuyer ? 'Data Calon Pembeli' : 'Data Properti'} — Perjanjian Nomor: {referral.agreement_number}
+            </div>
+            <table style={{ borderCollapse: 'collapse', width: '100%', fontSize: '10pt', lineHeight: 1.4, ...S.layer }}>
+              <thead>
+                <tr style={{ background: '#f3f4f6' }}>
+                  {(isBuyer
+                    ? ['No', 'Nama Calon Pembeli', 'No. HP', 'Properti yang Dicari']
+                    : ['No', 'Jenis Properti', 'Alamat', 'LT / LB (m²)', 'Legalitas', 'Pemilik']
+                  ).map((h) => <th key={h} style={{ ...S.cell, padding: '4px 6px', textAlign: 'left' }}>{h}</th>)}
+                </tr>
+              </thead>
+              <tbody>
+                {leads.map((lead, i) => {
+                  const cells = isBuyer
+                    ? [lead.name, lead.contact, lead.need]
+                    : [lead.title, lead.address, `${lead.land_area || '-'} / ${lead.building_area || '-'}`, lead.legal,
+                      [lead.owner_name, lead.owner_contact].filter(Boolean).join(' — ')];
+                  return (
+                    <tr key={i}>
+                      <td style={{ ...S.cell, padding: '4px 6px', textAlign: 'center', verticalAlign: 'top' }}>{i + 1}</td>
+                      {cells.map((v, j) => (
+                        <td key={j} style={{ ...S.cell, padding: '4px 6px', verticalAlign: 'top', whiteSpace: 'pre-wrap' }}>{v || '-'}</td>
+                      ))}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <Footer page={3} total={totalPages} />
+          </div>
+        )}
 
         {/* ====== UI CONTROLS (NOT IN PDF) ====== */}
         <div style={{ width: 794, maxWidth: '100%', background: 'white', padding: 24, borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.1)', boxSizing: 'border-box', fontFamily: 'system-ui, sans-serif' }}>

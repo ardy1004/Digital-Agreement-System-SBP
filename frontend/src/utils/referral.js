@@ -11,7 +11,55 @@ export function getReferralTypeLabel(type) {
   return { buyer: 'Referal Pembeli', seller: 'Referal Penjual' }[type] || type;
 }
 
-export const PERCENT_WORDS = { 20: 'dua puluh', 30: 'tiga puluh', 50: 'lima puluh' };
+export const LEGAL_OPTIONS = [
+  { value: 'SHM', label: 'Sertifikat Hak Milik (SHM)' },
+  { value: 'HGB', label: 'Hak Guna Bangunan (HGB)' },
+  { value: 'SHGB', label: 'SHGB' },
+  { value: 'Girik', label: 'Girik' },
+  { value: 'AJB', label: 'AJB' },
+];
+
+// Isian per item leads (opsional, bisa lebih dari satu) — key sama dengan LEAD_KEYS di backend
+export const LEAD_FIELDS = {
+  buyer: [
+    { key: 'name', label: 'Nama Calon Pembeli' },
+    { key: 'contact', label: 'No. HP Calon Pembeli' },
+    { key: 'need', label: 'Properti yang Dicari / Diminati', multiline: true, placeholder: 'Contoh: Rumah di Sleman, 3 kamar, budget sekitar Rp 1 M' },
+  ],
+  seller: [
+    { key: 'title', label: 'Jenis Properti', wide: true, placeholder: 'Contoh: Rumah 2 lantai, Tanah pekarangan' },
+    { key: 'address', label: 'Alamat Properti', wide: true },
+    { key: 'land_area', label: 'Luas Tanah (m²)' },
+    { key: 'building_area', label: 'Luas Bangunan (m²)' },
+    { key: 'legal', label: 'Legalitas', options: LEGAL_OPTIONS },
+    { key: 'owner_name', label: 'Nama Pemilik Properti' },
+    { key: 'owner_contact', label: 'No. HP Pemilik Properti' },
+  ],
+};
+
+export function getLeadTitle(type) {
+  return type === 'buyer' ? 'Data Leads Pembeli' : 'Data Properti';
+}
+
+export function emptyLead(type) {
+  return Object.fromEntries(LEAD_FIELDS[type].map((f) => [f.key, '']));
+}
+
+export function isLeadEmpty(lead) {
+  return Object.values(lead).every((v) => !String(v || '').trim());
+}
+
+// Daftar leads dari kolom JSON `leads` (kosong jika tidak ada)
+export function getLeads(referral) {
+  try {
+    const leads = JSON.parse(referral?.leads || '[]');
+    return Array.isArray(leads) ? leads : [];
+  } catch {
+    return [];
+  }
+}
+
+export const PERCENT_WORDS ={ 20: 'dua puluh', 30: 'tiga puluh', 50: 'lima puluh' };
 
 export const CONSENT_ITEMS = [
   'Saya menyatakan bahwa data dan informasi yang saya berikan adalah benar.',
