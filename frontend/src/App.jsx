@@ -5,6 +5,11 @@ import CreateAgreement from './pages/CreateAgreement';
 import AgreementDetail from './pages/AgreementDetail';
 import SigningPage from './pages/SigningPage';
 import SuccessPage from './pages/SuccessPage';
+import ReferralDashboard from './pages/referral/ReferralDashboard';
+import CreateReferral from './pages/referral/CreateReferral';
+import ReferralDetail from './pages/referral/ReferralDetail';
+import ReferralSigningPage from './pages/referral/ReferralSigningPage';
+import ReferralSuccessPage from './pages/referral/ReferralSuccessPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -25,6 +30,11 @@ function App() {
           <Route path="/agreement/:id" element={<AgreementDetail />} />
           <Route path="/sign/:token" element={<SigningPage />} />
           <Route path="/success/:token" element={<SuccessPage />} />
+          <Route path="/referrals" element={<ReferralDashboard />} />
+          <Route path="/referrals/create" element={<CreateReferral />} />
+          <Route path="/referrals/sign/:token" element={<ReferralSigningPage />} />
+          <Route path="/referrals/success/:token" element={<ReferralSuccessPage />} />
+          <Route path="/referrals/:id" element={<ReferralDetail />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Router>

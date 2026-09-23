@@ -34,4 +34,16 @@ export const agreementApi = {
   getPdfUrl: (id) => `/api/agreements/${id}/pdf`,
 };
 
+// Referral Agreement API
+export const referralApi = {
+  list: (status) => api.get('/referrals', { params: status ? { status } : {} }),
+  get: (id) => api.get(`/referrals/${id}`),
+  getByToken: (token) => api.get(`/referrals/token/${token}`),
+  create: (data) => api.post('/referrals', data),
+  update: (id, data) => api.put(`/referrals/${id}`, data),
+  send: (id) => api.post(`/referrals/${id}/send`),
+  sign: (token, data) => api.post(`/referrals/sign/${token}`, data),
+  getPdfUrl: (id) => `/api/referrals/${id}/pdf`,
+};
+
 export default api;

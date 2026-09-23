@@ -1,5 +1,6 @@
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
+import referrals from './referrals.js';
 
 const app = new Hono();
 
@@ -247,6 +248,9 @@ app.get('/api/agreements/:id/pdf', async (c) => {
     return c.json({ success: false, error: 'Error retrieving PDF' }, 500);
   }
 });
+
+// Perjanjian Kerja Sama Referal
+app.route('/api/referrals', referrals);
 
 function generateSecureToken() {
   const array = new Uint8Array(32);
