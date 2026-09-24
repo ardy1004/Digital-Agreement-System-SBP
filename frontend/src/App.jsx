@@ -5,7 +5,6 @@ import CreateAgreement from './pages/CreateAgreement';
 import AgreementDetail from './pages/AgreementDetail';
 import SigningPage from './pages/SigningPage';
 import SuccessPage from './pages/SuccessPage';
-import ReferralDashboard from './pages/referral/ReferralDashboard';
 import CreateReferral from './pages/referral/CreateReferral';
 import ReferralDetail from './pages/referral/ReferralDetail';
 import ReferralSigningPage from './pages/referral/ReferralSigningPage';
@@ -30,7 +29,7 @@ function App() {
           <Route path="/agreement/:id" element={<AgreementDetail />} />
           <Route path="/sign/:token" element={<SigningPage />} />
           <Route path="/success/:token" element={<SuccessPage />} />
-          <Route path="/referrals" element={<ReferralDashboard />} />
+          <Route path="/referrals" element={<Navigate to="/?jenis=referal" replace />} />
           <Route path="/referrals/create" element={<CreateReferral />} />
           <Route path="/referrals/sign/:token" element={<ReferralSigningPage />} />
           <Route path="/referrals/success/:token" element={<ReferralSuccessPage />} />

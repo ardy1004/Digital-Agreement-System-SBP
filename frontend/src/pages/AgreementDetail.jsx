@@ -23,6 +23,9 @@ export default function AgreementDetail() {
   const { data: agreement, isLoading, isError } = useQuery({
     queryKey: ['agreement', id],
     queryFn: () => agreementApi.get(id).then((r) => r.data.data),
+    // Muat ulang otomatis selama menunggu tanda tangan
+    refetchOnWindowFocus: true,
+    refetchInterval: (query) => (query.state.data?.status === 'sent' ? 30000 : false),
   });
 
   const sendMutation = useMutation({

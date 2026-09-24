@@ -123,7 +123,7 @@ export default function SigningPage() {
       if (printH <= pdfH) {
         // Dokumen muat dalam satu halaman — tambahkan di tengah vertikal
         const offsetY = (pdfH - printH) / 2;
-        pdf.addImage(imgData, 'PNG', 0, offsetY, printW, printH);
+        pdf.addImage(imgData, 'PNG', 0, offsetY, printW, printH, undefined, 'FAST');
       } else {
         // Dokumen lebih panjang dari satu halaman — bagi ke beberapa halaman
         let yPos = 0;
@@ -141,7 +141,7 @@ export default function SigningPage() {
           const pageData = pageCanvas.toDataURL('image/png');
 
           if (yPos > 0) pdf.addPage();
-          pdf.addImage(pageData, 'PNG', 0, 0, printW, sliceH);
+          pdf.addImage(pageData, 'PNG', 0, 0, printW, sliceH, undefined, 'FAST');
           yPos += pdfH;
         }
       }

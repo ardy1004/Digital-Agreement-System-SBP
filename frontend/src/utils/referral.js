@@ -122,7 +122,7 @@ export async function generatePdfBase64(pageElements) {
 
     if (printH <= pdfH + 0.5) {
       nextPage();
-      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, printW, Math.min(printH, pdfH));
+      pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, printW, Math.min(printH, pdfH), undefined, 'FAST');
     } else {
       // Halaman lebih panjang dari A4 (mis. klausul tambahan panjang) — potong ke beberapa halaman
       let yPos = 0;
@@ -138,7 +138,7 @@ export async function generatePdfBase64(pageElements) {
         ctx.drawImage(canvas, 0, srcY, imgW, srcH, 0, 0, imgW, srcH);
 
         nextPage();
-        pdf.addImage(pageCanvas.toDataURL('image/png'), 'PNG', 0, 0, printW, sliceH);
+        pdf.addImage(pageCanvas.toDataURL('image/png'), 'PNG', 0, 0, printW, sliceH, undefined, 'FAST');
         yPos += pdfH;
       }
     }

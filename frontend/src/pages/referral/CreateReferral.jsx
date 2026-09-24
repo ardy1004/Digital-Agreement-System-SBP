@@ -88,7 +88,7 @@ export default function CreateReferral() {
     onSuccess: (res) => {
       queryClient.invalidateQueries({ queryKey: ['referrals'] });
       const id = res.data?.data?.id;
-      navigate(id ? `/referrals/${id}` : '/referrals');
+      navigate(id ? `/referrals/${id}` : '/?jenis=referal');
     },
   });
 
@@ -131,8 +131,8 @@ export default function CreateReferral() {
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-3xl mx-auto px-4 py-8">
-        <Link to="/referrals" className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 mb-6">
-          <ArrowLeft size={16} /> Kembali ke Perjanjian Referal
+        <Link to="/?jenis=referal" className="inline-flex items-center gap-1.5 text-sm text-gray-600 hover:text-gray-900 mb-6">
+          <ArrowLeft size={16} /> Kembali ke Dashboard
         </Link>
 
         <h1 className="text-2xl font-bold text-gray-900 mb-8">Buat Perjanjian Referal</h1>
@@ -261,7 +261,7 @@ export default function CreateReferral() {
           </Section>
 
           <div className="flex items-center justify-end gap-3 pb-8">
-            <Link to="/referrals" className="px-5 py-2.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Batal</Link>
+            <Link to="/?jenis=referal" className="px-5 py-2.5 rounded-lg border border-gray-300 text-sm font-medium text-gray-700 bg-white hover:bg-gray-50">Batal</Link>
             <button type="submit" disabled={mutation.isPending}
               className="inline-flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 shadow-sm">
               {mutation.isPending ? (
