@@ -242,7 +242,9 @@ export default function ReferralSigningPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#e5e7eb', padding: '32px 16px' }}>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        /* Tengah di layar lebar; di HP mulai dari kiri agar dokumen 794px tidak terpotong di sisi kiri */
+        .sign-column > * { margin-left: auto; margin-right: auto; }`}</style>
 
       {/* Overlay loading — dokumen tetap di-mount di DOM agar ref tidak null */}
       {isProcessing && (
@@ -258,7 +260,7 @@ export default function ReferralSigningPage() {
         </div>
       )}
 
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 24 }}>
+      <div className="sign-column" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 24 }}>
 
         {/* ====== LANGKAH 1: DATA REKENING & PERSETUJUAN (NOT IN PDF) ====== */}
         <div style={{ width: 794, maxWidth: '100%', background: 'white', padding: 24, borderRadius: 12, boxShadow: '0 4px 24px rgba(0,0,0,0.1)', boxSizing: 'border-box', fontFamily: 'system-ui, sans-serif' }}>

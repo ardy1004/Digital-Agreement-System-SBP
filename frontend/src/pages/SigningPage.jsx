@@ -208,7 +208,9 @@ export default function SigningPage() {
 
   return (
     <div style={{ minHeight: '100vh', background: '#e5e7eb', padding: '32px 16px' }}>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        /* Tengah di layar lebar; di HP mulai dari kiri agar dokumen 794px tidak terpotong di sisi kiri */
+        .sign-column > * { margin-left: auto; margin-right: auto; }`}</style>
 
       {/* Overlay loading — dokumen tetap di-mount di DOM agar docRef tidak null */}
       {isProcessing && (
@@ -224,8 +226,8 @@ export default function SigningPage() {
         </div>
       )}
       
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        
+      <div className="sign-column" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start' }}>
+
         {/* ====== A4 DOCUMENT (ONLY THIS GOES TO PDF) ====== */}
         <div
           ref={docRef}
@@ -534,6 +536,8 @@ export default function SigningPage() {
         {/* ====== UI CONTROLS (NOT IN PDF) ====== */}
         <div style={{
           width: 794,
+          maxWidth: '100%',
+          boxSizing: 'border-box',
           background: 'white',
           marginTop: 24,
           padding: 24,
