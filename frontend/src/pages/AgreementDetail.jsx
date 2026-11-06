@@ -183,7 +183,8 @@ export default function AgreementDetail() {
               <DetailRow label="Durasi" value={agreement.duration ? `${agreement.duration} hari` : '90 hari'} />
               <DetailRow label="Pajak Ditanggung" value={getTaxByLabel(agreement.tax_by)} />
               <DetailRow label="Notaris Ditanggung" value={getNotaryByLabel(agreement.notary_by)} />
-              {agreement.additional_clause && <DetailRow label="Klausul Tambahan" value={<span className="whitespace-pre-wrap">{agreement.additional_clause}</span>} />}
+              <DetailRow label="Pasal 7 poin e" value={agreement.clause_e ? <span className="whitespace-pre-wrap">{agreement.clause_e}</span> : <span className="text-gray-400">— (tidak dicetak)</span>} />
+              {agreement.additional_clause && <DetailRow label="Catatan Internal (tidak tampil di dokumen)" value={<span className="whitespace-pre-wrap">{agreement.additional_clause}</span>} />}
             </div>
           </div>
 

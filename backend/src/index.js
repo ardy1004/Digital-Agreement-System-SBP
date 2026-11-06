@@ -129,8 +129,8 @@ app.post('/api/agreements', async (c) => {
       property_legal, property_address, property_maps,
       party1_name, party1_nik, party1_address, party1_contact, party1_description,
       party2_name, party2_company, party2_address, party2_contact, party2_description,
-      duration, is_exclusive, agreement_number
-    ) VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      duration, is_exclusive, agreement_number, clause_e
+    ) VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
     id, token,
     body.type, body.fee_percent || null, body.net_owner_price || null,
@@ -140,7 +140,7 @@ app.post('/api/agreements', async (c) => {
     body.party1_name, body.party1_nik, body.party1_address, body.party1_contact, body.party1_description || null,
     body.party2_name, body.party2_company || null, body.party2_address, body.party2_contact, body.party2_description || null,
     body.duration || '90', body.is_exclusive || 'false',
-    agreementNumber
+    agreementNumber, normalisasiKlausulE(body.clause_e)
   ).run();
 
   return c.json({ success: true, data: { id, token, agreement_number: agreementNumber } });
@@ -170,7 +170,7 @@ app.put('/api/agreements/:id', async (c) => {
       property_maps = ?, party1_name = ?, party1_nik = ?, party1_address = ?,
       party1_contact = ?, party1_description = ?, party2_name = ?,
       party2_company = ?, party2_address = ?, party2_contact = ?,
-      party2_description = ?, duration = ?, is_exclusive = ?,
+      party2_description = ?, duration = ?, is_exclusive = ?, clause_e = ?,
       updated_at = datetime('now')
     WHERE id = ?
   `).bind(
@@ -181,7 +181,7 @@ app.put('/api/agreements/:id', async (c) => {
     body.party1_name, body.party1_nik, body.party1_address, body.party1_contact,
     body.party1_description || null, body.party2_name, body.party2_company || null,
     body.party2_address, body.party2_contact, body.party2_description || null,
-    body.duration || '90', body.is_exclusive || 'false',
+    body.duration || '90', body.is_exclusive || 'false', normalisasiKlausulE(body.clause_e),
     id
   ).run();
 
@@ -313,6 +313,15 @@ app.all('/api/*', (c) => c.json({ success: false, error: 'Not found' }, 404));
 
 // Selain API: sajikan frontend (build Vite); alamat halaman React jatuh ke index.html
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
+
+// Pasal 7 poin e: teks manual admin, tampil di dokumen pemilik. Kosong → null
+// (poin e tidak dicetak). Awalan "e." yang ikut diketik dibuang supaya tidak
+// tercetak "e. e. …".
+function normalisasiKlausulE(nilai) {
+  if (typeof nilai !== 'string') return null;
+  const teks = nilai.trim().replace(/^e\s*[.)]\s+/i, '').trim();
+  return teks ? teks.slice(0, 2000) : null;
+}
 
 function generateSecureToken() {
   const array = new Uint8Array(32);

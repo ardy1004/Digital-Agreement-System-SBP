@@ -205,6 +205,7 @@ export default function SigningPage() {
 
   const today = getCurrentDateIndonesian();
   const nettPrice = formatCurrency(agreement?.net_owner_price || 5000000000);
+  const klausulE = (agreement?.clause_e || '').trim();
 
   return (
     <div style={{ minHeight: '100vh', background: '#e5e7eb', padding: '32px 16px' }}>
@@ -401,7 +402,11 @@ export default function SigningPage() {
             <div style={{ textIndent: -12, marginBottom: 4 }}>b. Selisih harga menjadi hak Pihak Pertama (Agen)</div>
             <div style={{ textIndent: -12, marginBottom: 4 }}>c. Pajak penjual ditanggung Pihak Pertama (Agen)</div>
             <div style={{ textIndent: -12, marginBottom: 4 }}>d. Biaya notaris ditanggung Pihak Pertama (Agen)</div>
-            <div style={{ textIndent: -12, marginBottom: 4 }}>e. Bonus Rp 10.000.000 (Sepuluh Juta Rupiah) diberikan kepada Pihak Kedua dari margin setelah transaksi selesai</div>
+            {/* Poin e diisi manual admin (kolom clause_e). JANGAN ganti ke additional_clause —
+                itu catatan internal berisi harga nett & selisih fee broker. */}
+            {klausulE && (
+              <div style={{ textIndent: -12, marginBottom: 4, whiteSpace: 'pre-wrap' }}>e. {klausulE}</div>
+            )}
           </div>
 
           {/* PENUTUP */}

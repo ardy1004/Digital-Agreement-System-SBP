@@ -57,7 +57,10 @@ const initialForm = {
   notary_by: 'agent',
   duration: '90',
   is_exclusive: 'false',
-  additional_clause: 'Pihak Pertama (Agen) wajib memberikan kompensasi maksimal Rp10.000.000 kepada Pihak Kedua (Pemilik) dari margin penjualan.',
+  // Pasal 7 poin e — diisi manual, TAMPIL di dokumen pemilik. Kosong = tidak dicetak.
+  clause_e: '',
+  // Catatan internal admin — TIDAK tampil di dokumen pemilik.
+  additional_clause: '',
 };
 
 function Input({ label, name, value, onChange, type = 'text', placeholder, required, ...rest }) {
@@ -278,8 +281,21 @@ export default function CreateAgreement() {
                 <Select label="Penanggung Notaris" name="notary_by" value={form.notary_by} onChange={handleChange} options={NOTARY_OPTIONS} />
               </div>
 
-              <TextArea label="Klausul Tambahan" name="additional_clause" value={form.additional_clause} onChange={handleChange} rows={4}
-                placeholder="Ketentuan tambahan yang disepakati" />
+              <div>
+                <TextArea label="Pasal 7 poin e — Ketentuan Tambahan (opsional)" name="clause_e" value={form.clause_e} onChange={handleChange} rows={3}
+                  placeholder="Contoh: Bonus Rp 10.000.000 (Sepuluh Juta Rupiah) diberikan kepada Pihak Kedua dari margin setelah transaksi selesai" />
+                <p className="mt-1 text-xs text-gray-500">
+                  Tampil di dokumen yang ditandatangani pemilik sebagai poin e Pasal 7. Kosongkan bila tidak ada — poin e tidak akan dicetak.
+                </p>
+              </div>
+
+              <div>
+                <TextArea label="Catatan Internal" name="additional_clause" value={form.additional_clause} onChange={handleChange} rows={3}
+                  placeholder="Catatan untuk admin, mis. harga penawaran atau selisih untuk fee broker" />
+                <p className="mt-1 text-xs text-amber-700">
+                  Hanya terlihat oleh admin. TIDAK tampil di dokumen pemilik.
+                </p>
+              </div>
             </div>
           </section>
 
