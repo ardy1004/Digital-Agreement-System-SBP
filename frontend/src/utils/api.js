@@ -32,6 +32,9 @@ export const agreementApi = {
   
   // Download PDF
   getPdfUrl: (id) => `/api/agreements/${id}/pdf`,
+
+  // Buat ulang PDF dari TTD tersimpan (admin)
+  regeneratePdf: (id, data) => api.post(`/agreements/${id}/regenerate-pdf`, data),
 };
 
 // Referral Agreement API

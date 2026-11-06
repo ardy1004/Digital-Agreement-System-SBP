@@ -23,13 +23,18 @@ const STATUS_TABS = [
 const LIVE_QUERY = { refetchOnWindowFocus: true, refetchInterval: 30000 };
 
 function toOwnerRow(a) {
+  const total = Number(a.signer_total) || 1;
+  const signed = Number(a.signer_signed) || 0;
   return {
     key: `owner-${a.id}`,
     kind: 'owner',
     number: a.agreement_number || a.id,
     jenis: `Owner – ${getTypeLabel(a.type)}`,
     status: a.status,
-    nama: a.party1_name,
+    // Banyak penanda tangan: link per orang → salin dari halaman detail
+    multi: total > 1,
+    progres: total > 1 ? `${signed}/${total} TTD` : null,
+    nama: total > 1 ? `${a.party1_name || '-'} +${total - 1} lainnya` : a.party1_name,
     createdAt: a.created_at,
     detailPath: `/agreement/${a.id}`,
     signPath: `/sign/${a.token}`,
@@ -284,7 +289,9 @@ export default function Dashboard() {
                         </td>
                         <td className="px-6 py-4"><span className="text-sm text-gray-700 whitespace-nowrap">{row.jenis}</span></td>
                         <td className="px-6 py-4">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${badge.color}`}>{badge.label}</span>
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium whitespace-nowrap ${badge.color}`}>
+                            {badge.label}{row.progres && row.status === 'sent' ? ` · ${row.progres}` : ''}
+                          </span>
                         </td>
                         <td className="px-6 py-4"><span className="text-sm text-gray-700">{row.nama || '-'}</span></td>
                         <td className="px-6 py-4"><span className="text-sm text-gray-500 whitespace-nowrap">{formatDate(row.createdAt)}</span></td>
@@ -294,7 +301,7 @@ export default function Dashboard() {
                               className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded-md transition-colors" title="Lihat Detail">
                               <ExternalLink className="w-4 h-4" />
                             </Link>
-                            {row.status === 'sent' && (
+                            {row.status === 'sent' && !row.multi && (
                               <button onClick={(e) => handleCopyLink(e, row)}
                                 className={`p-1.5 rounded-md transition-colors ${copiedKey === row.key ? 'text-green-600 bg-green-50' : 'text-gray-400 hover:text-blue-600 hover:bg-blue-50'}`}
                                 title={copiedKey === row.key ? 'Tersalin!' : 'Salin Link'}>

@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { agreementApi } from '../utils/api';
-import { formatCurrency, formatDate, formatDateTime, getStatusBadge, getTypeLabel, getTaxByLabel, getNotaryByLabel } from '../utils/format';
-import { ArrowLeft, Copy, Send, Download, ExternalLink, CheckCircle, Clock, FileText, Building2, User } from 'lucide-react';
+import { formatCurrency, formatDate, formatDateTime, getStatusBadge, getTypeLabel, getTaxByLabel, getNotaryByLabel, nomorWa } from '../utils/format';
+import { IMAGE_URLS, imageUrlToBase64 } from '../utils/referral';
+import { renderPdfBase64 } from '../utils/pdf';
+import AgreementDocument from '../components/AgreementDocument';
+import { daftarPenandaTangan, labelPenandaTangan } from '../utils/signers';
+import { ArrowLeft, Copy, Send, Download, ExternalLink, CheckCircle, Clock, FileText, Building2, User, MessageCircle, RefreshCw } from 'lucide-react';
 
 function DetailRow({ label, value }) {
   return (
@@ -14,11 +18,37 @@ function DetailRow({ label, value }) {
   );
 }
 
+async function salinTeks(teks) {
+  try {
+    await navigator.clipboard.writeText(teks);
+  } catch {
+    const ta = document.createElement('textarea');
+    ta.value = teks;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
+}
+
+function pesanWa(agreement, signer, url) {
+  return `Yth. Bapak/Ibu ${signer.name},\n\n` +
+    `Berikut link untuk membaca dan menandatangani Surat Perjanjian Kerjasama Pemasaran Properti ` +
+    `nomor ${agreement.agreement_number || '-'} dari CV Salam Bumi Property:\n${url}\n\n` +
+    `Link ini khusus untuk Bapak/Ibu, mohon tidak diteruskan ke orang lain. Terima kasih.`;
+}
+
 export default function AgreementDetail() {
   const { id } = useParams();
   const queryClient = useQueryClient();
   const [showSendModal, setShowSendModal] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(null);
+
+  // Buat Ulang PDF: dokumen dirender tersembunyi dari TTD tersimpan
+  const regenDocRef = useRef(null);
+  const regenBerjalan = useRef(false);
+  const [regenImages, setRegenImages] = useState(null);
+  const [regenStatus, setRegenStatus] = useState(null); // null | 'proses' | { ok, pesan }
 
   const { data: agreement, isLoading, isError } = useQuery({
     queryKey: ['agreement', id],
@@ -37,23 +67,41 @@ export default function AgreementDetail() {
     },
   });
 
-  const handleCopyLink = async () => {
-    if (!agreement?.token) return;
-    const url = `${window.location.origin}/sign/${agreement.token}`;
-    try {
-      await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      const ta = document.createElement('textarea');
-      ta.value = url;
-      document.body.appendChild(ta);
-      ta.select();
-      document.execCommand('copy');
-      document.body.removeChild(ta);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    }
+  const signers = daftarPenandaTangan(agreement, agreement?.signers);
+
+  useEffect(() => {
+    if (!regenImages || !regenDocRef.current || regenBerjalan.current) return;
+    regenBerjalan.current = true;
+    (async () => {
+      try {
+        await new Promise((r) => setTimeout(r, 300)); // beri waktu gambar ter-decode
+        const pdfBase64 = await renderPdfBase64(regenDocRef.current, { nomor: agreement?.agreement_number });
+        await agreementApi.regeneratePdf(id, { pdf_base64: pdfBase64 });
+        await queryClient.invalidateQueries({ queryKey: ['agreement', id] });
+        setRegenStatus({ ok: true, pesan: 'PDF berhasil dibuat ulang.' });
+      } catch (e) {
+        setRegenStatus({ ok: false, pesan: e.response?.data?.error || 'Gagal membuat ulang PDF.' });
+      } finally {
+        regenBerjalan.current = false;
+        setRegenImages(null);
+      }
+    })();
+  }, [regenImages, id, queryClient, agreement?.agreement_number]);
+
+  const mulaiRegen = async () => {
+    setRegenStatus('proses');
+    const [logo, materai, agentSignature] = await Promise.all([
+      imageUrlToBase64(IMAGE_URLS.logo),
+      imageUrlToBase64(IMAGE_URLS.materai),
+      imageUrlToBase64(IMAGE_URLS.agentSignature),
+    ]);
+    setRegenImages({ logo, materai, agentSignature });
+  };
+
+  const salin = async (kunci, teks) => {
+    await salinTeks(teks);
+    setCopiedKey(kunci);
+    setTimeout(() => setCopiedKey(null), 2000);
   };
 
   if (isLoading) {
@@ -77,9 +125,13 @@ export default function AgreementDetail() {
     );
   }
 
+  const banyak = signers.length > 1;
+  const sudahTtd = signers.filter((s) => s.status === 'signed').length;
   const badge = getStatusBadge(agreement.status);
-  const signingUrl = agreement.token ? `${window.location.origin}/sign/${agreement.token}` : null;
-  const pdfUrl = agreement.status === 'signed' ? agreementApi.getPdfUrl(id) : null;
+  const linkTtd = (s) => `${window.location.origin}/sign/${s.token || agreement.token}`;
+  const linkPertama = agreement.token ? linkTtd(signers[0]) : null;
+  const pdfUrl = agreement.status === 'signed' && agreement.pdf_url ? agreementApi.getPdfUrl(id) : null;
+  const bisaRegen = agreement.status === 'signed' && signers.every((s) => s.signature_png);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -92,9 +144,14 @@ export default function AgreementDetail() {
           </div>
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
-              <div className="flex items-center gap-3 mb-1">
+              <div className="flex items-center gap-3 mb-1 flex-wrap">
                 <h1 className="text-2xl font-bold text-gray-900">{agreement.agreement_number || agreement.id}</h1>
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badge.color}`}>{badge.label}</span>
+                {banyak && agreement.status !== 'draft' && (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
+                    {sudahTtd} dari {signers.length} sudah TTD
+                  </span>
+                )}
               </div>
               <p className="text-sm text-gray-500">{getTypeLabel(agreement.type)} — Dibuat {formatDate(agreement.created_at)}</p>
             </div>
@@ -102,24 +159,24 @@ export default function AgreementDetail() {
               {agreement.status === 'draft' && (
                 <button onClick={() => setShowSendModal(true)}
                   className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 shadow-sm">
-                  <Send className="w-4 h-4" /> Kirim ke Pemilik
+                  <Send className="w-4 h-4" /> {banyak ? 'Kirim ke Penanda Tangan' : 'Kirim ke Pemilik'}
                 </button>
               )}
-              {agreement.status === 'sent' && (
+              {agreement.status === 'sent' && !banyak && linkPertama && (
                 <>
-                  <button onClick={handleCopyLink}
+                  <button onClick={() => salin('header', linkPertama)}
                     className={`inline-flex items-center gap-2 px-4 py-2.5 text-sm font-medium rounded-lg shadow-sm ${
-                      copied ? 'bg-green-600 text-white' : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
+                      copiedKey === 'header' ? 'bg-green-600 text-white' : 'bg-white text-gray-700 border border-gray-200 hover:bg-gray-50'
                     }`}>
-                    {copied ? <><CheckCircle className="w-4 h-4" /> Tersalin!</> : <><Copy className="w-4 h-4" /> Salin Link</>}
+                    {copiedKey === 'header' ? <><CheckCircle className="w-4 h-4" /> Tersalin!</> : <><Copy className="w-4 h-4" /> Salin Link</>}
                   </button>
-                  <a href={signingUrl} target="_blank" rel="noopener noreferrer"
+                  <a href={linkPertama} target="_blank" rel="noopener noreferrer"
                     className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 shadow-sm">
                     <ExternalLink className="w-4 h-4" /> Buka Link
                   </a>
                 </>
               )}
-              {agreement.status === 'signed' && pdfUrl && (
+              {pdfUrl && (
                 <a href={pdfUrl} download
                   className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 shadow-sm">
                   <Download className="w-4 h-4" /> Unduh PDF
@@ -147,14 +204,32 @@ export default function AgreementDetail() {
 
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
             <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-              <div className="flex items-center gap-2"><User className="w-4 h-4 text-gray-500" /><h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Pihak Kedua (Pemilik)</h2></div>
+              <div className="flex items-center gap-2"><User className="w-4 h-4 text-gray-500" /><h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">
+                Pihak Kedua ({banyak ? `${signers.length} penanda tangan` : 'Pemilik'})
+              </h2></div>
             </div>
-            <div className="px-6 py-5 divide-y divide-gray-100">
-              <DetailRow label="Nama" value={agreement.party1_name} />
-              <DetailRow label="NIK" value={agreement.party1_nik} />
-              <DetailRow label="Alamat" value={agreement.party1_address} />
-              <DetailRow label="Telepon" value={agreement.party1_contact} />
-              <DetailRow label="Keterangan" value={agreement.party1_description} />
+            <div className="px-6 py-5">
+              {banyak && (
+                <p className="text-sm text-gray-700 mb-4">
+                  {agreement.decedent_name
+                    ? <>Para ahli waris dari <strong>{agreement.decedent_name}</strong></>
+                    : 'Para pemilik bersama'}
+                </p>
+              )}
+              <div className="space-y-4">
+                {signers.map((s, i) => (
+                  <div key={s.id || i} className={banyak ? 'rounded-lg border border-gray-100 p-3' : ''}>
+                    {banyak && <p className="text-xs font-semibold text-gray-500 uppercase mb-2">{labelPenandaTangan(agreement, signers.length, i)}</p>}
+                    <dl className="divide-y divide-gray-100">
+                      <DetailRow label="Nama" value={s.name} />
+                      <DetailRow label="NIK" value={s.nik} />
+                      <DetailRow label="Alamat" value={s.address} />
+                      <DetailRow label="No. WhatsApp" value={s.contact} />
+                      <DetailRow label="Keterangan" value={s.description} />
+                    </dl>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
@@ -190,46 +265,103 @@ export default function AgreementDetail() {
 
           <div className="bg-white rounded-xl border border-gray-200 overflow-hidden lg:col-span-2">
             <div className="px-6 py-4 border-b border-gray-200 bg-gray-50">
-              <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-gray-500" /><h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Status & Dokumen</h2></div>
+              <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-gray-500" /><h2 className="text-sm font-semibold text-gray-900 uppercase tracking-wide">Status & Tanda Tangan</h2></div>
             </div>
-            <div className="px-6 py-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="px-6 py-5 space-y-6">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div>
                   <dt className="text-xs text-gray-500 uppercase tracking-wide mb-1">Status</dt>
                   <dd><span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${badge.color}`}>{badge.label}</span></dd>
                 </div>
                 <DetailRow label="Dikirim Pada" value={formatDateTime(agreement.sent_at)} />
-                <DetailRow label="Ditandatangani Pada" value={formatDateTime(agreement.signed_at)} />
-                {agreement.status === 'signed' && (
-                  <>
-                    <DetailRow label="Nama Penandatangan" value={agreement.signer_name} />
-                    <DetailRow label="NIK Penandatangan" value={agreement.signer_nik} />
-                    <DetailRow label="IP Penandatangan" value={agreement.signer_ip} />
-                  </>
-                )}
-                {agreement.status === 'sent' && signingUrl && (
-                  <div className="md:col-span-2 lg:col-span-3">
-                    <dt className="text-xs text-gray-500 uppercase tracking-wide mb-1">Link Tanda Tangan</dt>
-                    <dd className="flex items-center gap-2">
-                      <code className="text-xs bg-gray-100 px-2 py-1 rounded text-gray-700 break-all flex-1">{signingUrl}</code>
-                      <button onClick={handleCopyLink}
-                        className={`flex-shrink-0 inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md ${copied ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                        {copied ? 'Tersalin' : 'Salin'}
-                      </button>
-                    </dd>
-                  </div>
-                )}
-                {agreement.status === 'signed' && pdfUrl && (
-                  <div>
-                    <dt className="text-xs text-gray-500 uppercase tracking-wide mb-1">Dokumen PDF</dt>
-                    <dd><a href={pdfUrl} download className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 underline"><Download className="w-4 h-4" /> Unduh PDF</a></dd>
-                  </div>
-                )}
+                <DetailRow label={banyak ? 'Lengkap Ditandatangani Pada' : 'Ditandatangani Pada'} value={formatDateTime(agreement.signed_at)} />
               </div>
+
+              <div className="divide-y divide-gray-100 border border-gray-100 rounded-lg">
+                {signers.map((s, i) => {
+                  const url = linkTtd(s);
+                  const wa = nomorWa(s.contact);
+                  const bisaKirim = agreement.status === 'sent' && s.status !== 'signed';
+                  return (
+                    <div key={s.id || i} className="p-4">
+                      <div className="flex flex-wrap items-center gap-2 mb-1">
+                        <span className="text-sm font-semibold text-gray-900">{s.name}</span>
+                        {banyak && <span className="text-xs text-gray-500">({labelPenandaTangan(agreement, signers.length, i)})</span>}
+                        {s.status === 'signed' ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
+                            <CheckCircle className="w-3 h-3" /> Sudah TTD
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600">
+                            <Clock className="w-3 h-3" /> {agreement.status === 'draft' ? 'Belum dikirim' : 'Menunggu'}
+                          </span>
+                        )}
+                      </div>
+                      {s.status === 'signed' && (
+                        <p className="text-xs text-gray-500">
+                          {formatDateTime(s.signed_at)}{s.signer_ip ? ` · IP ${s.signer_ip}` : ''}
+                        </p>
+                      )}
+                      {bisaKirim && (
+                        <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-2">
+                          <code className="text-xs bg-gray-100 px-2 py-1 rounded text-gray-700 break-all flex-1">{url}</code>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <button onClick={() => salin(s.id || i, url)}
+                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md ${copiedKey === (s.id || i) ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                              <Copy className="w-3.5 h-3.5" /> {copiedKey === (s.id || i) ? 'Tersalin' : 'Salin'}
+                            </button>
+                            <a href={url} target="_blank" rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200">
+                              <ExternalLink className="w-3.5 h-3.5" /> Buka
+                            </a>
+                            {wa ? (
+                              <a href={`https://wa.me/${wa}?text=${encodeURIComponent(pesanWa(agreement, s, url))}`} target="_blank" rel="noopener noreferrer"
+                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-green-600 text-white hover:bg-green-700">
+                                <MessageCircle className="w-3.5 h-3.5" /> Kirim WA
+                              </a>
+                            ) : (
+                              <span className="text-xs text-gray-400" title="No. WhatsApp belum diisi">Kirim WA (no. WA kosong)</span>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              {agreement.status === 'signed' && (
+                <div className="flex flex-wrap items-center gap-3">
+                  {pdfUrl ? (
+                    <a href={pdfUrl} download className="inline-flex items-center gap-1.5 text-sm text-blue-600 hover:text-blue-700 underline">
+                      <Download className="w-4 h-4" /> Unduh PDF
+                    </a>
+                  ) : (
+                    <span className="text-sm text-amber-700">PDF belum tersimpan.</span>
+                  )}
+                  {bisaRegen && (
+                    <button onClick={mulaiRegen} disabled={regenStatus === 'proses'}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                      <RefreshCw className={`w-3.5 h-3.5 ${regenStatus === 'proses' ? 'animate-spin' : ''}`} />
+                      {regenStatus === 'proses' ? 'Membuat PDF…' : 'Buat Ulang PDF'}
+                    </button>
+                  )}
+                  {regenStatus && regenStatus !== 'proses' && (
+                    <span className={`text-xs ${regenStatus.ok ? 'text-green-700' : 'text-red-600'}`}>{regenStatus.pesan}</span>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </div>
       </main>
+
+      {/* Dokumen tersembunyi untuk Buat Ulang PDF — sama persis dengan halaman TTD */}
+      {regenImages && (
+        <div aria-hidden="true" style={{ position: 'fixed', left: -10000, top: 0, pointerEvents: 'none' }}>
+          <AgreementDocument docRef={regenDocRef} agreement={agreement} signers={signers} images={regenImages} />
+        </div>
+      )}
 
       {showSendModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -240,8 +372,13 @@ export default function AgreementDetail() {
               <h3 className="text-lg font-semibold text-gray-900">Kirim Perjanjian</h3>
             </div>
             <p className="text-sm text-gray-600 mb-6">
-              Apakah Anda yakin ingin mengirim perjanjian ini? Setelah dikirim, pemilik properti akan menerima link untuk menandatangani perjanjian secara digital.
+              {banyak
+                ? `Setelah dikirim, isi perjanjian dan daftar penanda tangan terkunci. Setiap penanda tangan (${signers.length} orang) mendapat link masing-masing — kirimkan lewat tombol Kirim WA di halaman ini.`
+                : 'Apakah Anda yakin ingin mengirim perjanjian ini? Setelah dikirim, pemilik properti akan menerima link untuk menandatangani perjanjian secara digital.'}
             </p>
+            {sendMutation.isError && (
+              <p className="text-sm text-red-600 mb-4">{sendMutation.error?.response?.data?.error || 'Gagal mengirim.'}</p>
+            )}
             <div className="flex items-center justify-end gap-3">
               <button onClick={() => setShowSendModal(false)} disabled={sendMutation.isPending}
                 className="px-4 py-2.5 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 disabled:opacity-50">Batal</button>

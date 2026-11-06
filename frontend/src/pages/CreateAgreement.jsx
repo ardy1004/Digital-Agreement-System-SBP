@@ -3,7 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate, Link } from 'react-router-dom';
 import { agreementApi } from '../utils/api';
 import { formatCurrency } from '../utils/format';
-import { ArrowLeft, Building2, User, FileText, Save } from 'lucide-react';
+import { ArrowLeft, Building2, User, FileText, Save, UserPlus, Trash2 } from 'lucide-react';
 
 const LEGAL_OPTIONS = [
   { value: 'SHM', label: 'Sertifikat Hak Milik (SHM)' },
@@ -34,12 +34,9 @@ const initialForm = {
   party2_contact: '0813-9127-8889',
   party2_description: 'Bertindak untuk dan atas nama perusahaan',
 
-  // Pihak Kedua (Owner) → disimpan ke party1
-  party1_name: '',
-  party1_nik: '',
-  party1_address: '',
-  party1_contact: '0813-9127-8889',
-  party1_description: '',
+  // Pihak Kedua → daftar penanda tangan (state `signers` terpisah).
+  // Nama pewaris hanya dipakai bila penanda tangan > 1.
+  decedent_name: '',
 
   // Property
   property_title: 'Rumah Induk 4 Kamar + 16 Kamar Kost',
@@ -63,13 +60,20 @@ const initialForm = {
   additional_clause: '',
 };
 
-function Input({ label, name, value, onChange, type = 'text', placeholder, required, ...rest }) {
+const MAKS_PENANDA_TANGAN = 10; // sama dengan backend/src/signers.js
+
+// No. WA default KOSONG: kolom ini dipakai tombol "Kirim WA" di detail. Dulu
+// terisi nomor SBP sendiri → link TTD akan terkirim ke diri sendiri.
+const penandaTanganKosong = () => ({ name: '', nik: '', address: '', contact: '', description: '' });
+
+function Input({ label, name, id, value, onChange, type = 'text', placeholder, required, ...rest }) {
+  const inputId = id || name;
   return (
     <div>
-      <label htmlFor={name} className="block text-sm font-medium text-gray-700 mb-1">
+      <label htmlFor={inputId} className="block text-sm font-medium text-gray-700 mb-1">
         {label}{required && <span className="text-red-500 ml-0.5">*</span>}
       </label>
-      <input id={name} name={name} type={type} value={value} onChange={onChange} placeholder={placeholder} required={required}
+      <input id={inputId} name={name} type={type} value={value} onChange={onChange} placeholder={placeholder} required={required}
         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" {...rest} />
     </div>
   );
@@ -126,7 +130,22 @@ export default function CreateAgreement() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [form, setForm] = useState(initialForm);
+  const [signers, setSigners] = useState([penandaTanganKosong()]);
   const [errors, setErrors] = useState({});
+  const banyak = signers.length > 1;
+
+  const ubahSigner = (i, e) => {
+    const { name, value } = e.target;
+    setSigners((daftar) => daftar.map((s, j) => (j === i ? { ...s, [name]: value } : s)));
+    const kunci = `signers.${i}.${name}`;
+    if (errors[kunci]) setErrors((p) => { const n = { ...p }; delete n[kunci]; return n; });
+  };
+  const tambahSigner = () => setSigners((d) => (d.length < MAKS_PENANDA_TANGAN ? [...d, penandaTanganKosong()] : d));
+  const hapusSigner = (i) => {
+    setSigners((d) => d.filter((_, j) => j !== i));
+    setErrors({}); // indeks bergeser — validasi ulang saat simpan
+  };
+  const labelSigner = (i) => (!banyak ? 'Pemilik' : form.decedent_name.trim() ? `Ahli Waris ${i + 1}` : `Pemilik ${i + 1}`);
 
   const mutation = useMutation({
     mutationFn: (data) => agreementApi.create(data),
@@ -145,8 +164,14 @@ export default function CreateAgreement() {
 
   const validate = () => {
     const e = {};
-    if (!form.party1_name.trim()) e.party1_name = 'Wajib diisi';
-    if (!form.party1_nik.trim()) e.party1_nik = 'Wajib diisi';
+    const nikTerpakai = new Set();
+    signers.forEach((s, i) => {
+      const nik = s.nik.replace(/[\s.-]/g, '');
+      if (!s.name.trim()) e[`signers.${i}.name`] = 'Wajib diisi';
+      if (!/^\d{16}$/.test(nik)) e[`signers.${i}.nik`] = 'NIK harus 16 angka';
+      else if (nikTerpakai.has(nik)) e[`signers.${i}.nik`] = 'NIK sama dengan penanda tangan lain';
+      nikTerpakai.add(nik);
+    });
     if (!form.party2_name.trim()) e.party2_name = 'Wajib diisi';
     if (!form.property_title.trim()) e.property_title = 'Wajib diisi';
     if (!form.property_address.trim()) e.property_address = 'Wajib diisi';
@@ -159,7 +184,17 @@ export default function CreateAgreement() {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!validate()) return;
-    const data = { ...form };
+    const data = {
+      ...form,
+      decedent_name: banyak ? form.decedent_name.trim() : '',
+      signers: signers.map((s) => ({
+        name: s.name.trim(),
+        nik: s.nik.replace(/[\s.-]/g, ''),
+        address: s.address.trim(),
+        contact: s.contact.trim(),
+        description: s.description.trim(),
+      })),
+    };
     if (data.type === 'commission') delete data.net_owner_price;
     else delete data.fee_percent;
     mutation.mutate(data);
@@ -201,29 +236,67 @@ export default function CreateAgreement() {
             </div>
           </section>
 
-          {/* Pihak Kedua - Pemilik */}
+          {/* Pihak Kedua - Pemilik / Para Ahli Waris */}
           <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6">
             <div className="flex items-center gap-3 mb-5 pb-3 border-b border-gray-200">
               <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-blue-50 text-blue-600"><User size={20} /></div>
-              <h2 className="text-lg font-semibold text-gray-800">Pihak Kedua (Pemilik)</h2>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <Input label="Nama Lengkap" name="party1_name" value={form.party1_name} onChange={handleChange} required />
-                {errors.party1_name && <p className="mt-1 text-xs text-red-500">{errors.party1_name}</p>}
-              </div>
-              <div>
-                <Input label="NIK" name="party1_nik" value={form.party1_nik} onChange={handleChange} required />
-                {errors.party1_nik && <p className="mt-1 text-xs text-red-500">{errors.party1_nik}</p>}
-              </div>
-              <div className="sm:col-span-2">
-                <Input label="Alamat" name="party1_address" value={form.party1_address} onChange={handleChange} />
-              </div>
-              <Input label="Telepon" name="party1_contact" value={form.party1_contact} onChange={handleChange} />
-              <div className="sm:col-span-2">
-                <Input label="Keterangan" name="party1_description" value={form.party1_description} onChange={handleChange} />
+                <h2 className="text-lg font-semibold text-gray-800">Pihak Kedua ({banyak ? 'Para Ahli Waris / Pemilik' : 'Pemilik'})</h2>
+                <p className="text-xs text-gray-500">Setiap penanda tangan mendapat link TTD dan kotak TTD bermaterai sendiri.</p>
               </div>
             </div>
+
+            {banyak && (
+              <div className="mb-5">
+                <Input label="Nama Pewaris (opsional)" name="decedent_name" value={form.decedent_name} onChange={handleChange}
+                  placeholder="Tulis lengkap, mis. Alm. Budi Santoso / Almh. Siti Aminah" />
+                <p className="mt-1 text-xs text-gray-500">
+                  Diisi → dokumen menyebut "para ahli waris dari {form.decedent_name.trim() || '…'}". Kosong → "para pemilik bersama" (mis. suami-istri).
+                </p>
+              </div>
+            )}
+
+            <div className="space-y-4">
+              {signers.map((s, i) => (
+                <div key={i} className={banyak ? 'rounded-lg border border-gray-200 p-4' : ''}>
+                  {banyak && (
+                    <div className="flex items-center justify-between mb-3">
+                      <h3 className="text-sm font-semibold text-gray-700">{labelSigner(i)}</h3>
+                      <button type="button" onClick={() => hapusSigner(i)}
+                        className="inline-flex items-center gap-1 text-xs text-red-600 hover:text-red-700">
+                        <Trash2 size={14} /> Hapus
+                      </button>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div>
+                      <Input label="Nama Lengkap (sesuai KTP)" name="name" id={`signer-${i}-name`} value={s.name} onChange={(e) => ubahSigner(i, e)} required />
+                      {errors[`signers.${i}.name`] && <p className="mt-1 text-xs text-red-500">{errors[`signers.${i}.name`]}</p>}
+                    </div>
+                    <div>
+                      <Input label="NIK" name="nik" id={`signer-${i}-nik`} value={s.nik} onChange={(e) => ubahSigner(i, e)} required
+                        inputMode="numeric" placeholder="16 angka" />
+                      {errors[`signers.${i}.nik`] && <p className="mt-1 text-xs text-red-500">{errors[`signers.${i}.nik`]}</p>}
+                    </div>
+                    <div className="sm:col-span-2">
+                      <Input label="Alamat (sesuai KTP)" name="address" id={`signer-${i}-address`} value={s.address} onChange={(e) => ubahSigner(i, e)} />
+                    </div>
+                    <Input label="No. WhatsApp" name="contact" id={`signer-${i}-contact`} value={s.contact} onChange={(e) => ubahSigner(i, e)}
+                      placeholder="08xx — dipakai tombol Kirim WA" />
+                    <Input label="Keterangan" name="description" id={`signer-${i}-description`} value={s.description} onChange={(e) => ubahSigner(i, e)}
+                      placeholder={banyak ? 'Mis. Anak kandung / Istri' : ''} />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <button type="button" onClick={tambahSigner} disabled={signers.length >= MAKS_PENANDA_TANGAN}
+              className="mt-4 inline-flex items-center gap-2 px-4 py-2 rounded-lg border border-dashed border-blue-400 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 disabled:opacity-50 disabled:cursor-not-allowed">
+              <UserPlus size={16} /> Tambah Ahli Waris / Penanda Tangan
+            </button>
+            {signers.length >= MAKS_PENANDA_TANGAN && (
+              <p className="mt-1 text-xs text-gray-500">Maksimal {MAKS_PENANDA_TANGAN} penanda tangan.</p>
+            )}
           </section>
 
           {/* Data Properti */}

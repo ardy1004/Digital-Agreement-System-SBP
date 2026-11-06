@@ -2,6 +2,10 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { basicAuth } from 'hono/basic-auth';
 import referrals from './referrals.js';
+import {
+  normalisasiSigners, insertSignerStatements, ambilSigners, publicSigner,
+  snapshotSigner, hitungProgres, validasiSignature,
+} from './signers.js';
 
 const app = new Hono();
 
@@ -68,24 +72,24 @@ app.get('/img-proxy/*', async (c) => {
 
 app.get('/api/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
-// List all agreements
+// Daftar perjanjian + progres TTD (untuk badge "2/3 TTD" di Dashboard)
+const SELECT_DAFTAR = `
+  SELECT a.*,
+    (SELECT COUNT(*) FROM agreement_signers s WHERE s.agreement_id = a.id) AS signer_total,
+    (SELECT COUNT(*) FROM agreement_signers s WHERE s.agreement_id = a.id AND s.status = 'signed') AS signer_signed
+  FROM agreements a`;
+
 app.get('/api/agreements', async (c) => {
   const { env } = c;
   const status = c.req.query('status');
 
-  let query = 'SELECT * FROM agreements ORDER BY created_at DESC';
-
-  if (status) {
-    query = 'SELECT * FROM agreements WHERE status = ? ORDER BY created_at DESC';
-    const result = await env.DB.prepare(query).bind(status).all();
-    return c.json({ success: true, data: result.results });
-  }
-
-  const result = await env.DB.prepare(query).all();
+  const result = status
+    ? await env.DB.prepare(SELECT_DAFTAR + ' WHERE a.status = ? ORDER BY a.created_at DESC').bind(status).all()
+    : await env.DB.prepare(SELECT_DAFTAR + ' ORDER BY a.created_at DESC').all();
   return c.json({ success: true, data: result.results });
 });
 
-// Get single agreement by ID
+// Detail untuk admin: lengkap, termasuk token & TTD tiap penanda tangan
 app.get('/api/agreements/:id', async (c) => {
   const { env } = c;
   const id = c.req.param('id');
@@ -96,63 +100,58 @@ app.get('/api/agreements/:id', async (c) => {
     return c.json({ success: false, error: 'Agreement not found' }, 404);
   }
 
-  return c.json({ success: true, data: result });
+  const signers = await ambilSigners(env.DB, id);
+  return c.json({ success: true, data: { ...result, signers } });
 });
 
-// Get agreement by token
+// Halaman TTD: token = link milik SATU penanda tangan
 app.get('/api/agreements/token/:token', async (c) => {
   const { env } = c;
-  const token = c.req.param('token');
+  const data = await muatUntukToken(env, c.req.param('token'));
 
-  const result = await env.DB.prepare('SELECT * FROM agreements WHERE token = ?').bind(token).first();
-
-  if (!result) {
+  if (!data) {
     return c.json({ success: false, error: 'Agreement not found or link expired' }, 404);
   }
 
-  return c.json({ success: true, data: publicAgreement(result) });
+  return c.json({ success: true, data: tampilanPenandaTangan(data) });
 });
 
-// Create new agreement
+// Create new agreement (+ semua penanda tangan, atomik)
 app.post('/api/agreements', async (c) => {
   const { env } = c;
   const body = await c.req.json();
+
+  const hasil = normalisasiSigners(body);
+  if (hasil.error) return c.json({ success: false, error: hasil.error }, 400);
 
   const id = crypto.randomUUID();
   const token = generateSecureToken();
   const agreementNumber = await generateAgreementNumber(env);
 
-  await env.DB.prepare(`
-    INSERT INTO agreements (
-      id, token, status, type, fee_percent, net_owner_price, tax_by, notary_by,
-      additional_clause, property_title, property_land_area, property_building_area,
-      property_legal, property_address, property_maps,
-      party1_name, party1_nik, party1_address, party1_contact, party1_description,
-      party2_name, party2_company, party2_address, party2_contact, party2_description,
-      duration, is_exclusive, agreement_number, clause_e
-    ) VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).bind(
-    id, token,
-    body.type, body.fee_percent || null, body.net_owner_price || null,
-    body.tax_by, body.notary_by, body.additional_clause || null,
-    body.property_title, body.property_land_area, body.property_building_area,
-    body.property_legal, body.property_address, body.property_maps || null,
-    body.party1_name, body.party1_nik, body.party1_address, body.party1_contact, body.party1_description || null,
-    body.party2_name, body.party2_company || null, body.party2_address, body.party2_contact, body.party2_description || null,
-    body.duration || '90', body.is_exclusive || 'false',
-    agreementNumber, normalisasiKlausulE(body.clause_e)
-  ).run();
+  const kolom = {
+    id, token, status: 'draft', agreement_number: agreementNumber,
+    ...kolomDariBody(body),
+    ...kolomCerminPihak1(hasil.signers, body),
+  };
+  const nama = Object.keys(kolom);
+
+  await env.DB.batch([
+    env.DB.prepare(
+      `INSERT INTO agreements (${nama.join(', ')}) VALUES (${nama.map(() => '?').join(', ')})`,
+    ).bind(...nama.map((k) => kolom[k])),
+    ...insertSignerStatements(env.DB, id, hasil.signers, token, generateSecureToken),
+  ]);
 
   return c.json({ success: true, data: { id, token, agreement_number: agreementNumber } });
 });
 
-// Update agreement (only if draft)
+// Update agreement (only if draft) — daftar penanda tangan diganti seluruhnya
 app.put('/api/agreements/:id', async (c) => {
   const { env } = c;
   const id = c.req.param('id');
   const body = await c.req.json();
 
-  const existing = await env.DB.prepare('SELECT status FROM agreements WHERE id = ?').bind(id).first();
+  const existing = await env.DB.prepare('SELECT status, token FROM agreements WHERE id = ?').bind(id).first();
 
   if (!existing) {
     return c.json({ success: false, error: 'Agreement not found' }, 404);
@@ -162,28 +161,20 @@ app.put('/api/agreements/:id', async (c) => {
     return c.json({ success: false, error: 'Cannot edit agreement after sending' }, 400);
   }
 
-  await env.DB.prepare(`
-    UPDATE agreements SET
-      type = ?, fee_percent = ?, net_owner_price = ?, tax_by = ?, notary_by = ?,
-      additional_clause = ?, property_title = ?, property_land_area = ?,
-      property_building_area = ?, property_legal = ?, property_address = ?,
-      property_maps = ?, party1_name = ?, party1_nik = ?, party1_address = ?,
-      party1_contact = ?, party1_description = ?, party2_name = ?,
-      party2_company = ?, party2_address = ?, party2_contact = ?,
-      party2_description = ?, duration = ?, is_exclusive = ?, clause_e = ?,
-      updated_at = datetime('now')
-    WHERE id = ?
-  `).bind(
-    body.type, body.fee_percent || null, body.net_owner_price || null,
-    body.tax_by, body.notary_by, body.additional_clause || null,
-    body.property_title, body.property_land_area, body.property_building_area,
-    body.property_legal, body.property_address, body.property_maps || null,
-    body.party1_name, body.party1_nik, body.party1_address, body.party1_contact,
-    body.party1_description || null, body.party2_name, body.party2_company || null,
-    body.party2_address, body.party2_contact, body.party2_description || null,
-    body.duration || '90', body.is_exclusive || 'false', normalisasiKlausulE(body.clause_e),
-    id
-  ).run();
+  const hasil = normalisasiSigners(body);
+  if (hasil.error) return c.json({ success: false, error: hasil.error }, 400);
+
+  const kolom = { ...kolomDariBody(body), ...kolomCerminPihak1(hasil.signers, body) };
+  const nama = Object.keys(kolom);
+
+  await env.DB.batch([
+    env.DB.prepare(
+      `UPDATE agreements SET ${nama.map((k) => `${k} = ?`).join(', ')}, updated_at = datetime('now')
+       WHERE id = ? AND status = 'draft'`,
+    ).bind(...nama.map((k) => kolom[k]), id),
+    env.DB.prepare('DELETE FROM agreement_signers WHERE agreement_id = ?').bind(id),
+    ...insertSignerStatements(env.DB, id, hasil.signers, existing.token, generateSecureToken),
+  ]);
 
   return c.json({ success: true });
 });
@@ -203,7 +194,12 @@ app.post('/api/agreements/:id/send', async (c) => {
     return c.json({ success: false, error: 'Agreement already sent or signed' }, 400);
   }
 
-  const snapshot = JSON.stringify(existing);
+  const signers = await ambilSigners(env.DB, id);
+  if (!signers.length) {
+    return c.json({ success: false, error: 'Belum ada penanda tangan' }, 400);
+  }
+
+  const snapshot = JSON.stringify({ ...existing, signers: signers.map(snapshotSigner) });
 
   await env.DB.prepare(`
     UPDATE agreements SET status = 'sent', sent_at = datetime('now'),
@@ -219,7 +215,9 @@ app.post('/api/agreements/:id/send', async (c) => {
   });
 });
 
-// Sign agreement
+// Sign agreement — satu penanda tangan per request.
+// Body: { signature_png, seen_version, pdf_base64? } — pdf_base64 wajib bila
+// penanda tangan ini yang TERAKHIR (PDF final berisi semua TTD).
 app.post('/api/agreements/sign/:token', async (c) => {
   const { env } = c;
   const token = c.req.param('token');
@@ -227,53 +225,118 @@ app.post('/api/agreements/sign/:token', async (c) => {
   const ip = c.req.header('CF-Connecting-IP') || c.req.header('X-Forwarded-For') || 'unknown';
   const userAgent = c.req.header('User-Agent') || 'unknown';
 
-  const existing = await env.DB.prepare('SELECT * FROM agreements WHERE token = ?').bind(token).first();
+  const data = await muatUntukToken(env, token);
 
-  if (!existing) {
+  if (!data) {
     return c.json({ success: false, error: 'Agreement not found or link expired' }, 404);
   }
 
-  if (existing.status === 'signed') {
+  const { agreement, signers, me } = data;
+
+  if (agreement.status === 'signed') {
     return c.json({ success: false, error: 'This agreement has already been signed' }, 400);
   }
 
-  if (existing.status !== 'sent') {
+  if (agreement.status !== 'sent') {
     return c.json({ success: false, error: 'Invalid agreement state' }, 400);
   }
 
-  // Upload PDF to R2
-  const pdfBuffer = base64ToArrayBuffer(body.pdf_base64);
-  const now = new Date();
-  const pdfKey = 'agreements/' + now.getFullYear() + '/' + String(now.getMonth() + 1).padStart(2, '0') + '/' + existing.id + '.pdf';
-
-  try {
-    await env.R2.put(pdfKey, pdfBuffer, {
-      httpMetadata: { contentType: 'application/pdf' },
-    });
-  } catch (e) {
-    // If R2 fails, still save the agreement but without PDF URL
-    console.error('R2 upload failed:', e);
+  if (me.status === 'signed') {
+    return c.json({ success: false, error: 'Anda sudah menandatangani perjanjian ini' }, 400);
   }
 
-  // Update database
-  await env.DB.prepare(`
-    UPDATE agreements SET
-      status = 'signed',
-      signed_at = datetime('now'),
-      signer_name = ?,
-      signer_nik = ?,
-      signer_ip = ?,
-      signer_user_agent = ?,
-      pdf_url = ?,
-      updated_at = datetime('now')
-    WHERE token = ? AND status = 'sent'
-  `).bind(
-    body.signer_name, body.signer_nik, ip, userAgent, pdfKey, token
-  ).run();
+  // Tab yang terbuka SEBELUM fitur ini dideploy mengirim format lama
+  // ({ signer_name, signer_nik, pdf_base64 }). Sah hanya untuk 1 penanda tangan:
+  // TTD-nya ada di PDF, tidak perlu disimpan terpisah.
+  const formatLama = body.signature_png === undefined && signers.length === 1;
+  let signature = null;
+  let seen = 0;
 
-  const updated = await env.DB.prepare('SELECT * FROM agreements WHERE token = ?').bind(token).first();
+  if (!formatLama) {
+    const salah = validasiSignature(body.signature_png);
+    if (salah) return c.json({ success: false, error: salah }, 400);
+    signature = body.signature_png;
+    seen = Number(body.seen_version);
+    if (!Number.isInteger(seen) || seen < 0) {
+      return c.json({ success: false, error: 'Versi dokumen tidak valid' }, 400);
+    }
+  }
 
-  return c.json({ success: true, data: publicAgreement(updated) });
+  const { signed: sudahTtd } = hitungProgres(signers);
+  if (seen !== sudahTtd) return konflikVersi(c);
+
+  const terakhir = signers.filter((s) => s.status !== 'signed').length === 1;
+  if (terakhir && !body.pdf_base64) {
+    return c.json({ success: false, error: 'Dokumen PDF tidak ditemukan' }, 400);
+  }
+
+  // Klaim atomik: gagal bila orang lain menandatangani di antara saat halaman
+  // dibuka dan sekarang — PDF final tidak boleh kehilangan satu TTD pun.
+  const klaim = await env.DB.prepare(`
+    UPDATE agreement_signers SET
+      status = 'signed', signature_png = ?, signed_at = datetime('now'),
+      signer_ip = ?, signer_user_agent = ?
+    WHERE id = ? AND status = 'pending'
+      AND (SELECT COUNT(*) FROM agreement_signers WHERE agreement_id = ? AND status = 'signed') = ?
+  `).bind(signature, ip, userAgent, me.id, agreement.id, seen).run();
+
+  if (!klaim.meta?.changes) return konflikVersi(c);
+
+  if (terakhir) {
+    const pdfKey = await simpanPdf(env, agreement, body.pdf_base64);
+    const semua = await ambilSigners(env.DB, agreement.id);
+    await env.DB.prepare(`
+      UPDATE agreements SET
+        status = 'signed',
+        signed_at = datetime('now'),
+        signer_name = ?,
+        signer_nik = ?,
+        signer_ip = ?,
+        signer_user_agent = ?,
+        pdf_url = ?,
+        updated_at = datetime('now')
+      WHERE id = ? AND status = 'sent'
+    `).bind(
+      semua.map((s) => s.name).join(', '), semua.map((s) => s.nik).join(', '),
+      ip, userAgent, pdfKey, agreement.id
+    ).run();
+  }
+
+  const baru = await muatUntukToken(env, token);
+  return c.json({ success: true, data: tampilanPenandaTangan(baru) });
+});
+
+// Buat ulang PDF dari TTD yang tersimpan (admin) — cadangan bila browser
+// penanda tangan terakhir gagal membuat PDF atau unggahan R2 gagal.
+app.post('/api/agreements/:id/regenerate-pdf', async (c) => {
+  const { env } = c;
+  const id = c.req.param('id');
+  const body = await c.req.json();
+
+  const agreement = await env.DB.prepare('SELECT * FROM agreements WHERE id = ?').bind(id).first();
+  if (!agreement) return c.json({ success: false, error: 'Agreement not found' }, 404);
+
+  if (agreement.status !== 'signed') {
+    return c.json({ success: false, error: 'PDF hanya bisa dibuat ulang setelah semua pihak menandatangani' }, 400);
+  }
+
+  const signers = await ambilSigners(env.DB, id);
+  if (signers.some((s) => !s.signature_png)) {
+    return c.json({
+      success: false,
+      error: 'Tanda tangan perjanjian ini tidak tersimpan terpisah (dibuat sebelum fitur multi penanda tangan), jadi PDF-nya tidak bisa dibuat ulang.',
+    }, 400);
+  }
+
+  if (!body.pdf_base64) return c.json({ success: false, error: 'Dokumen PDF tidak ditemukan' }, 400);
+
+  const pdfKey = await simpanPdf(env, agreement, body.pdf_base64);
+  if (!pdfKey) return c.json({ success: false, error: 'Gagal menyimpan PDF' }, 500);
+
+  await env.DB.prepare("UPDATE agreements SET pdf_url = ?, updated_at = datetime('now') WHERE id = ?")
+    .bind(pdfKey, id).run();
+
+  return c.json({ success: true });
 });
 
 // Download PDF
@@ -323,7 +386,7 @@ app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 //   signer_ip / signer_user_agent / pdf_url (key R2)
 const PUBLIC_AGREEMENT_FIELDS = [
   'id', 'agreement_number', 'status', 'type', 'fee_percent', 'net_owner_price',
-  'tax_by', 'notary_by', 'clause_e',
+  'tax_by', 'notary_by', 'clause_e', 'decedent_name',
   'property_title', 'property_land_area', 'property_building_area',
   'property_legal', 'property_address', 'property_maps',
   'party1_name', 'party1_nik', 'party1_address', 'party1_contact', 'party1_description',
@@ -336,6 +399,99 @@ function publicAgreement(row) {
   const out = Object.fromEntries(PUBLIC_AGREEMENT_FIELDS.map((k) => [k, row[k] ?? null]));
   out.has_pdf = Boolean(row.pdf_url);
   return out;
+}
+
+// Token → { me, agreement, signers }. Token selalu milik SATU penanda tangan
+// (penanda tangan #1 memakai token perjanjian, lihat migrasi 0005).
+async function muatUntukToken(env, token) {
+  const me = await env.DB.prepare('SELECT * FROM agreement_signers WHERE token = ?').bind(token).first();
+  if (!me) return null;
+  const agreement = await env.DB.prepare('SELECT * FROM agreements WHERE id = ?').bind(me.agreement_id).first();
+  if (!agreement) return null;
+  const signers = await ambilSigners(env.DB, agreement.id);
+  return { me, agreement, signers };
+}
+
+// Respons publik halaman TTD. seen_version = jumlah yang sudah TTD saat dimuat;
+// dikirim balik saat TTD untuk deteksi tabrakan.
+function tampilanPenandaTangan({ me, agreement, signers }) {
+  const { total, signed } = hitungProgres(signers);
+  return {
+    ...publicAgreement(agreement),
+    signers: signers.map(publicSigner),
+    me_id: me.id,
+    seen_version: signed,
+    signer_total: total,
+    signer_signed: signed,
+  };
+}
+
+function konflikVersi(c) {
+  return c.json({
+    success: false,
+    code: 'VERSION_CONFLICT',
+    error: 'Pihak lain baru saja menandatangani perjanjian ini. Dokumen dimuat ulang — silakan periksa, lalu tanda tangan lagi.',
+  }, 409);
+}
+
+// Simpan PDF ke R2. Key lama dipakai ulang bila ada (buat ulang PDF menimpa).
+// Gagal → null: perjanjian tetap tersimpan, PDF bisa dibuat ulang dari admin.
+async function simpanPdf(env, agreement, pdfBase64) {
+  const now = new Date();
+  const pdfKey = agreement.pdf_url ||
+    'agreements/' + now.getFullYear() + '/' + String(now.getMonth() + 1).padStart(2, '0') + '/' + agreement.id + '.pdf';
+  try {
+    await env.R2.put(pdfKey, base64ToArrayBuffer(pdfBase64), {
+      httpMetadata: { contentType: 'application/pdf' },
+    });
+    return pdfKey;
+  } catch (e) {
+    console.error('R2 upload failed:', e);
+    return null;
+  }
+}
+
+// Kolom perjanjian yang diisi admin (create & update draf). undefined → null
+// karena D1 menolak bind undefined.
+function kolomDariBody(body) {
+  const kolom = {
+    type: body.type,
+    fee_percent: body.fee_percent || null,
+    net_owner_price: body.net_owner_price || null,
+    tax_by: body.tax_by,
+    notary_by: body.notary_by,
+    additional_clause: body.additional_clause || null,
+    clause_e: normalisasiKlausulE(body.clause_e),
+    property_title: body.property_title,
+    property_land_area: body.property_land_area,
+    property_building_area: body.property_building_area,
+    property_legal: body.property_legal,
+    property_address: body.property_address,
+    property_maps: body.property_maps || null,
+    party2_name: body.party2_name,
+    party2_company: body.party2_company || null,
+    party2_address: body.party2_address,
+    party2_contact: body.party2_contact,
+    party2_description: body.party2_description || null,
+    duration: body.duration || '90',
+    is_exclusive: body.is_exclusive || 'false',
+  };
+  for (const k of Object.keys(kolom)) if (kolom[k] === undefined) kolom[k] = null;
+  return kolom;
+}
+
+// party1_* = cermin penanda tangan #1, supaya Dashboard & kode yang membaca
+// party1_name tetap benar. Sumber kebenaran: tabel agreement_signers.
+function kolomCerminPihak1(signers, body) {
+  const s = signers[0];
+  return {
+    party1_name: s.name,
+    party1_nik: s.nik,
+    party1_address: s.address || null,
+    party1_contact: s.contact || null,
+    party1_description: s.description || null,
+    decedent_name: signers.length > 1 ? (String(body.decedent_name || '').trim() || null) : null,
+  };
 }
 
 // Pasal 7 poin e: teks manual admin, tampil di dokumen pemilik. Kosong → null

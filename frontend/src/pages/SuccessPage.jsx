@@ -2,7 +2,8 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { agreementApi } from '../utils/api';
 import { formatDateTime } from '../utils/format';
-import { CheckCircle, Download, FileText, Home } from 'lucide-react';
+import { daftarPenandaTangan } from '../utils/signers';
+import { CheckCircle, Clock, Download, FileText, Home, Users } from 'lucide-react';
 
 export default function SuccessPage() {
   const { token } = useParams();
@@ -37,7 +38,25 @@ export default function SuccessPage() {
     );
   }
 
-  const pdfUrl = agreement.has_pdf ? agreementApi.getPdfUrl(agreement.id) : null;
+  const signers = daftarPenandaTangan(agreement, agreement.signers);
+  const me = signers.find((s) => s.id && s.id === agreement.me_id) || signers[0];
+  const selesai = agreement.status === 'signed';
+  const belum = signers.filter((s) => s.status !== 'signed');
+
+  // Link dibuka langsung padahal belum TTD → arahkan ke halaman TTD
+  if (!selesai && me?.status !== 'signed') {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+        <div className="text-center max-w-md">
+          <h2 className="text-xl font-bold text-gray-900 mb-2">Belum Ditandatangani</h2>
+          <p className="text-gray-600 mb-4">Anda belum menandatangani perjanjian ini.</p>
+          <Link to={`/sign/${token}`} className="inline-block px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">Buka Dokumen</Link>
+        </div>
+      </div>
+    );
+  }
+
+  const pdfUrl = selesai && agreement.has_pdf ? agreementApi.getPdfUrl(agreement.id) : null;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center px-4 py-12">
@@ -46,31 +65,44 @@ export default function SuccessPage() {
           <CheckCircle className="w-12 h-12 text-green-600" />
         </div>
 
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">Dokumen Berhasil Ditandatangani</h1>
-        <p className="text-gray-600 mb-8">Surat perjanjian kerjasama telah berhasil ditandatangani secara digital.</p>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">
+          {selesai ? 'Dokumen Berhasil Ditandatangani' : 'Tanda Tangan Anda Tersimpan'}
+        </h1>
+        <p className="text-gray-600 mb-8">
+          {selesai
+            ? 'Surat perjanjian kerjasama telah ditandatangani secara digital oleh seluruh pihak.'
+            : 'Perjanjian akan lengkap setelah seluruh pihak menandatangani. PDF perjanjian tersedia setelah itu.'}
+        </p>
 
-        <div className="bg-gray-50 rounded-xl p-5 mb-8 text-left">
-          <div className="flex items-start gap-3 mb-4">
+        <div className="bg-gray-50 rounded-xl p-5 mb-8 text-left space-y-4">
+          <div className="flex items-start gap-3">
             <FileText className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
             <div>
               <p className="text-sm text-gray-500">Nomor Perjanjian</p>
               <p className="font-semibold text-gray-900">{agreement.agreement_number || '-'}</p>
             </div>
           </div>
-          <div className="flex items-start gap-3 mb-4">
-            <FileText className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-sm text-gray-500">Tanggal Ditandatangani</p>
-              <p className="font-semibold text-gray-900">{formatDateTime(agreement.signed_at) || '-'}</p>
-            </div>
-          </div>
           <div className="flex items-start gap-3">
             <FileText className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
             <div>
-              <p className="text-sm text-gray-500">Nama Pemilik</p>
-              <p className="font-semibold text-gray-900">{agreement.party1_name || '-'}</p>
+              <p className="text-sm text-gray-500">Ditandatangani oleh</p>
+              <p className="font-semibold text-gray-900">{me?.name || '-'}</p>
+              <p className="text-sm text-gray-600">{formatDateTime(me?.signed_at || agreement.signed_at)}</p>
             </div>
           </div>
+          {signers.length > 1 && (
+            <div className="flex items-start gap-3">
+              {belum.length ? <Clock className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" /> : <Users className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />}
+              <div>
+                <p className="text-sm text-gray-500">
+                  {signers.length - belum.length} dari {signers.length} pihak sudah menandatangani
+                </p>
+                {belum.length > 0 && (
+                  <p className="text-sm text-gray-700">Menunggu: {belum.map((s) => s.name).join(', ')}</p>
+                )}
+              </div>
+            </div>
+          )}
         </div>
 
         {pdfUrl && (
