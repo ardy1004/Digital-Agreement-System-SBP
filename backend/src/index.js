@@ -110,7 +110,7 @@ app.get('/api/agreements/token/:token', async (c) => {
     return c.json({ success: false, error: 'Agreement not found or link expired' }, 404);
   }
 
-  return c.json({ success: true, data: result });
+  return c.json({ success: true, data: publicAgreement(result) });
 });
 
 // Create new agreement
@@ -273,7 +273,7 @@ app.post('/api/agreements/sign/:token', async (c) => {
 
   const updated = await env.DB.prepare('SELECT * FROM agreements WHERE token = ?').bind(token).first();
 
-  return c.json({ success: true, data: updated });
+  return c.json({ success: true, data: publicAgreement(updated) });
 });
 
 // Download PDF
@@ -313,6 +313,30 @@ app.all('/api/*', (c) => c.json({ success: false, error: 'Not found' }, 404));
 
 // Selain API: sajikan frontend (build Vite); alamat halaman React jatuh ke index.html
 app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
+
+// Kolom yang BOLEH dilihat penanda tangan (endpoint publik /token & /sign).
+// ALLOWLIST, bukan blocklist: kolom baru tidak ikut terkirim sebelum sengaja
+// ditambahkan di sini. Yang sengaja tidak ada:
+//   additional_clause  — catatan internal (harga nett, selisih fee broker)
+//   document_snapshot  — salinan baris lengkap, termasuk catatan internal
+//   token              — link TTD; di perjanjian multi penanda tangan = link orang lain
+//   signer_ip / signer_user_agent / pdf_url (key R2)
+const PUBLIC_AGREEMENT_FIELDS = [
+  'id', 'agreement_number', 'status', 'type', 'fee_percent', 'net_owner_price',
+  'tax_by', 'notary_by', 'clause_e',
+  'property_title', 'property_land_area', 'property_building_area',
+  'property_legal', 'property_address', 'property_maps',
+  'party1_name', 'party1_nik', 'party1_address', 'party1_contact', 'party1_description',
+  'party2_name', 'party2_company', 'party2_address', 'party2_contact', 'party2_description',
+  'duration', 'is_exclusive', 'sent_at', 'signed_at', 'signer_name',
+];
+
+function publicAgreement(row) {
+  if (!row) return null;
+  const out = Object.fromEntries(PUBLIC_AGREEMENT_FIELDS.map((k) => [k, row[k] ?? null]));
+  out.has_pdf = Boolean(row.pdf_url);
+  return out;
+}
 
 // Pasal 7 poin e: teks manual admin, tampil di dokumen pemilik. Kosong → null
 // (poin e tidak dicetak). Awalan "e." yang ikut diketik dibuang supaya tidak

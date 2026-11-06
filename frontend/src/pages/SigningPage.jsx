@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import SignatureCanvas from 'react-signature-canvas';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
@@ -37,6 +37,7 @@ async function imageUrlToBase64(url) {
 export default function SigningPage() {
   const { token } = useParams();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const sigCanvasRef = useRef(null);
   const docRef = useRef(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -148,12 +149,15 @@ export default function SigningPage() {
 
       const pdfBase64 = pdf.output('datauristring').split(',')[1];
 
-      await agreementApi.sign(token, {
+      const res = await agreementApi.sign(token, {
         signer_name: agreement.party1_name,
         signer_nik: agreement.party1_nik,
         pdf_base64: pdfBase64,
       });
 
+      // Halaman sukses memakai query yang sama; tanpa ini ia sempat merender data
+      // cache sebelum TTD (has_pdf=false → tombol Unduh PDF tidak muncul).
+      if (res.data?.data) queryClient.setQueryData(['agreement-token', token], res.data.data);
       navigate(`/success/${token}`);
     } catch (err) {
       console.error('Signing error:', err);

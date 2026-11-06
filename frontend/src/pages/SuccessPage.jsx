@@ -37,7 +37,7 @@ export default function SuccessPage() {
     );
   }
 
-  const pdfUrl = agreement.pdf_url ? agreementApi.getPdfUrl(agreement.id) : null;
+  const pdfUrl = agreement.has_pdf ? agreementApi.getPdfUrl(agreement.id) : null;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-green-50 to-blue-50 flex items-center justify-center px-4 py-12">
