@@ -37,18 +37,27 @@ export async function renderPdfBase64(docElement, { nomor } = {}) {
   const pdfH = pdf.internal.pageSize.getHeight();  // 297 mm
   const isiH = pdfH - MARGIN_BAWAH_MM;              // area isi; sisanya untuk nomor halaman
   const imgW = canvas.width;
-  const imgH = canvas.height;
   const halamanPx = Math.floor((imgW * isiH) / pdfW); // tinggi area isi dalam px kanvas
+  const skala = imgW / docElement.getBoundingClientRect().width;
+  const atasDok = docElement.getBoundingClientRect().top;
+
+  // Pangkas ruang kosong di bawah isi terakhir. Footer HTML & watermark
+  // (position: absolute) tidak dihitung — teks footer dicetak ulang di kaki
+  // setiap halaman (tulisNomorHalaman). Tanpa ini, padding bawah + footer bisa
+  // tumpah menjadi halaman terakhir yang kosong (pernah: PDF 4 halaman, hal. 4
+  // hanya berisi footer).
+  const bawahIsi = [...docElement.children]
+    .filter((el) => getComputedStyle(el).position !== 'absolute')
+    .reduce((m, el) => Math.max(m, el.getBoundingClientRect().bottom), atasDok);
+  const imgH = Math.min(canvas.height, Math.ceil((bawahIsi - atasDok + JARAK_BAWAH_ISI_PX) * skala));
 
   if (imgH <= halamanPx) {
     const printH = (imgH / imgW) * pdfW;
-    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, (isiH - printH) / 2, pdfW, printH, undefined, 'FAST');
+    pdf.addImage(potong(canvas, 0, imgH).toDataURL('image/png'), 'PNG', 0, (isiH - printH) / 2, pdfW, printH, undefined, 'FAST');
     tulisNomorHalaman(pdf, nomor);
     return pdf.output('datauristring').split(',')[1];
   }
 
-  const skala = imgW / docElement.getBoundingClientRect().width;
-  const atasDok = docElement.getBoundingClientRect().top;
   const blok = [...docElement.querySelectorAll('[data-pdf-keep]')].map((el) => {
     const r = el.getBoundingClientRect();
     const lebih = el.dataset.pdfKeep === 'ttd' ? LEBIHAN_TTD_PX : 0;
@@ -60,19 +69,27 @@ export async function renderPdfBase64(docElement, { nomor } = {}) {
 
   for (const [y0, y1] of titikPotong(imgH, halamanPx, blok)) {
     const tinggi = y1 - y0;
-    const potongan = document.createElement('canvas');
-    potongan.width = imgW;
-    potongan.height = tinggi;
-    potongan.getContext('2d').drawImage(canvas, 0, y0, imgW, tinggi, 0, 0, imgW, tinggi);
-
     if (y0 > 0) pdf.addPage();
-    pdf.addImage(potongan.toDataURL('image/png'), 'PNG', 0, 0, pdfW, (tinggi / imgW) * pdfW, undefined, 'FAST');
+    pdf.addImage(potong(canvas, y0, tinggi).toDataURL('image/png'), 'PNG', 0, 0, pdfW, (tinggi / imgW) * pdfW, undefined, 'FAST');
   }
 
   tulisNomorHalaman(pdf, nomor);
   return pdf.output('datauristring').split(',')[1];
 }
 
+// Jarak putih yang disisakan di bawah isi terakhir (px CSS). Harus < 22 px:
+// garis atas footer HTML berada ±22 px di bawah isi (padding bawah 64 − footer 42).
+const JARAK_BAWAH_ISI_PX = 16;
+
+function potong(canvas, y0, tinggi) {
+  const c = document.createElement('canvas');
+  c.width = canvas.width;
+  c.height = tinggi;
+  c.getContext('2d').drawImage(canvas, 0, y0, canvas.width, tinggi, 0, 0, canvas.width, tinggi);
+  return c;
+}
+
+// Kaki setiap halaman: pengganti footer HTML + nomor perjanjian & halaman.
 // Font standar jsPDF hanya WinAnsi — pakai tanda hubung biasa, bukan em dash.
 function tulisNomorHalaman(pdf, nomor) {
   const total = pdf.getNumberOfPages();
@@ -80,10 +97,13 @@ function tulisNomorHalaman(pdf, nomor) {
   const pdfH = pdf.internal.pageSize.getHeight();
   for (let i = 1; i <= total; i++) {
     pdf.setPage(i);
+    pdf.setDrawColor(229, 231, 235);
+    pdf.line(14, pdfH - 8, pdfW - 14, pdfH - 8);
     pdf.setFont('times', 'normal');
     pdf.setFontSize(7);
     pdf.setTextColor(150);
-    const teks = (nomor ? `Perjanjian No. ${nomor} - ` : '') + `Halaman ${i} dari ${total}`;
+    const teks = 'Dibuat secara digital melalui SBP Digital Agreement System' +
+      (nomor ? ` - Perjanjian No. ${nomor}` : '') + ` - Halaman ${i} dari ${total}`;
     pdf.text(teks, pdfW / 2, pdfH - 4, { align: 'center' });
   }
 }

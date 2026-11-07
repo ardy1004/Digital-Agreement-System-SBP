@@ -3,10 +3,27 @@ import { useQuery } from '@tanstack/react-query';
 import { agreementApi } from '../utils/api';
 import { formatDateTime } from '../utils/format';
 import { daftarPenandaTangan } from '../utils/signers';
-import { CheckCircle, Clock, Download, FileText, Home, Users } from 'lucide-react';
+import { useState } from 'react';
+import { CheckCircle, Clock, Copy, Download, FileText, Home, MessageCircle, Users } from 'lucide-react';
 
 export default function SuccessPage() {
   const { token } = useParams();
+  const [tersalin, setTersalin] = useState(false);
+
+  const salinLink = async (teks) => {
+    try {
+      await navigator.clipboard.writeText(teks);
+    } catch {
+      const ta = document.createElement('textarea');
+      ta.value = teks;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+    setTersalin(true);
+    setTimeout(() => setTersalin(false), 2000);
+  };
 
   const { data: agreement, isLoading, error } = useQuery({
     queryKey: ['agreement-token', token],
@@ -38,13 +55,20 @@ export default function SuccessPage() {
     );
   }
 
+  const linkBersama = agreement.link_mode === 'bersama';
   const signers = daftarPenandaTangan(agreement, agreement.signers);
-  const me = signers.find((s) => s.id && s.id === agreement.me_id) || signers[0];
+  // Link bersama: `me_id` hanya ada tepat setelah TTD (dari respons TTD). Dibuka
+  // ulang → tidak diketahui siapa yang membuka, tampilkan progres saja.
+  const me = signers.find((s) => s.id && s.id === agreement.me_id) || (linkBersama ? null : signers[0]);
   const selesai = agreement.status === 'signed';
   const belum = signers.filter((s) => s.status !== 'signed');
+  const linkIni = `${window.location.origin}/sign/${token}`;
+  const pesanBagikan = `Mohon tanda tangani Surat Perjanjian Kerjasama Pemasaran Properti nomor ${agreement.agreement_number || '-'} ` +
+    `dengan CV Salam Bumi Property. Buka link ini, pilih nama Anda, lalu tanda tangan:\n${linkIni}\n\n` +
+    `Belum menandatangani: ${belum.map((s) => s.name).join(', ')}.`;
 
-  // Link dibuka langsung padahal belum TTD → arahkan ke halaman TTD
-  if (!selesai && me?.status !== 'signed') {
+  // Link pribadi dibuka langsung padahal belum TTD → arahkan ke halaman TTD
+  if (!linkBersama && !selesai && me?.status !== 'signed') {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
         <div className="text-center max-w-md">
@@ -66,7 +90,7 @@ export default function SuccessPage() {
         </div>
 
         <h1 className="text-2xl font-bold text-gray-900 mb-2">
-          {selesai ? 'Dokumen Berhasil Ditandatangani' : 'Tanda Tangan Anda Tersimpan'}
+          {selesai ? 'Dokumen Berhasil Ditandatangani' : me ? 'Tanda Tangan Anda Tersimpan' : 'Status Penandatanganan'}
         </h1>
         <p className="text-gray-600 mb-8">
           {selesai
@@ -82,14 +106,16 @@ export default function SuccessPage() {
               <p className="font-semibold text-gray-900">{agreement.agreement_number || '-'}</p>
             </div>
           </div>
-          <div className="flex items-start gap-3">
-            <FileText className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
-            <div>
-              <p className="text-sm text-gray-500">Ditandatangani oleh</p>
-              <p className="font-semibold text-gray-900">{me?.name || '-'}</p>
-              <p className="text-sm text-gray-600">{formatDateTime(me?.signed_at || agreement.signed_at)}</p>
+          {me && (
+            <div className="flex items-start gap-3">
+              <FileText className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
+              <div>
+                <p className="text-sm text-gray-500">Ditandatangani oleh</p>
+                <p className="font-semibold text-gray-900">{me.name || '-'}</p>
+                <p className="text-sm text-gray-600">{formatDateTime(me.signed_at || agreement.signed_at)}</p>
+              </div>
             </div>
-          </div>
+          )}
           {signers.length > 1 && (
             <div className="flex items-start gap-3">
               {belum.length ? <Clock className="w-5 h-5 text-amber-500 mt-0.5 flex-shrink-0" /> : <Users className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />}
@@ -104,6 +130,23 @@ export default function SuccessPage() {
             </div>
           )}
         </div>
+
+        {/* Link bersama: ahli waris yang sudah TTD meneruskan link ke yang belum */}
+        {linkBersama && !selesai && belum.length > 0 && (
+          <div className="mb-6 text-left">
+            <p className="text-sm font-medium text-gray-800 mb-3">Teruskan link ini ke ahli waris yang belum menandatangani:</p>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <a href={`https://wa.me/?text=${encodeURIComponent(pesanBagikan)}`} target="_blank" rel="noopener noreferrer"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-green-600 text-white rounded-xl font-semibold hover:bg-green-700">
+                <MessageCircle className="w-5 h-5" /> Bagikan ke WhatsApp
+              </a>
+              <button onClick={() => salinLink(linkIni)}
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white border border-gray-300 text-gray-700 rounded-xl font-semibold hover:bg-gray-50">
+                <Copy className="w-5 h-5" /> {tersalin ? 'Tersalin!' : 'Salin Link'}
+              </button>
+            </div>
+          </div>
+        )}
 
         {pdfUrl && (
           <a href={pdfUrl} target="_blank" rel="noopener noreferrer"

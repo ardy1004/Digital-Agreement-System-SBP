@@ -132,6 +132,17 @@ export default function AgreementDetail() {
   const linkPertama = agreement.token ? linkTtd(signers[0]) : null;
   const pdfUrl = agreement.status === 'signed' && agreement.pdf_url ? agreementApi.getPdfUrl(id) : null;
   const bisaRegen = agreement.status === 'signed' && signers.every((s) => s.signature_png);
+  const ahliWaris = agreement.owner_mode === 'ahli_waris';
+  // Satu link untuk semua ahli waris (mode bersama)
+  const linkBersama = agreement.sign_mode === 'bersama' && agreement.shared_token
+    ? `${window.location.origin}/sign/${agreement.shared_token}` : null;
+  const pesanGrup = linkBersama &&
+    `Yth. Bapak/Ibu para ahli waris${agreement.decedent_name ? ` ${agreement.decedent_name}` : ''},\n\n` +
+    `Berikut link Surat Perjanjian Kerjasama Pemasaran Properti nomor ${agreement.agreement_number || '-'} dari CV Salam Bumi Property. ` +
+    `Setiap ahli waris membuka link ini, memilih namanya sendiri, lalu tanda tangan:\n${linkBersama}\n\nTerima kasih.`;
+  const perwakilan = signers.find((s) => s.id && s.id === agreement.representative_signer_id);
+  const rekening = [agreement.payout_bank, agreement.payout_account_number, agreement.payout_account_holder && `a.n. ${agreement.payout_account_holder}`]
+    .filter(Boolean).join(' · ');
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -230,6 +241,14 @@ export default function AgreementDetail() {
                   </div>
                 ))}
               </div>
+              {ahliWaris && (
+                <dl className="mt-4 rounded-lg bg-amber-50/60 border border-amber-100 px-3 divide-y divide-amber-100">
+                  <DetailRow label="Rekening penerima hasil bersih" value={rekening || 'Belum dicantumkan (disepakati tertulis oleh seluruh ahli waris)'} />
+                  <DetailRow label="No. Surat Keterangan Waris" value={agreement.heir_letter_number} />
+                  <DetailRow label="Perwakilan komunikasi" value={perwakilan?.name} />
+                  <DetailRow label="Cara tanda tangan" value={agreement.sign_mode === 'bersama' ? 'Satu link bersama' : 'Link per orang (mode ketat)'} />
+                </dl>
+              )}
             </div>
           </div>
 
@@ -277,11 +296,60 @@ export default function AgreementDetail() {
                 <DetailRow label={banyak ? 'Lengkap Ditandatangani Pada' : 'Ditandatangani Pada'} value={formatDateTime(agreement.signed_at)} />
               </div>
 
+              {linkBersama && agreement.status === 'sent' && (
+                <div className="rounded-lg border-2 border-blue-200 bg-blue-50/60 p-4">
+                  <p className="text-sm font-semibold text-blue-900 mb-1">Link Bersama — bagikan satu link ini ke grup keluarga</p>
+                  <p className="text-xs text-blue-800 mb-3">
+                    Setiap ahli waris memilih namanya sendiri, mencentang pernyataan identitas, lalu tanda tangan. Ahli waris yang sudah tanda tangan bisa meneruskan link ini.
+                  </p>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+                    <code className="text-xs bg-white px-2 py-1.5 rounded border border-blue-100 text-gray-700 break-all flex-1">{linkBersama}</code>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button onClick={() => salin('bersama', linkBersama)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md ${copiedKey === 'bersama' ? 'bg-green-100 text-green-700' : 'bg-white border border-gray-200 text-gray-700 hover:bg-gray-50'}`}>
+                        <Copy className="w-3.5 h-3.5" /> {copiedKey === 'bersama' ? 'Tersalin' : 'Salin'}
+                      </button>
+                      <a href={linkBersama} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-white border border-gray-200 text-gray-700 hover:bg-gray-50">
+                        <ExternalLink className="w-3.5 h-3.5" /> Buka
+                      </a>
+                      <a href={`https://wa.me/?text=${encodeURIComponent(pesanGrup)}`} target="_blank" rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-green-600 text-white hover:bg-green-700">
+                        <MessageCircle className="w-3.5 h-3.5" /> Bagikan ke Grup WA
+                      </a>
+                    </div>
+                  </div>
+                </div>
+              )}
+
               <div className="divide-y divide-gray-100 border border-gray-100 rounded-lg">
                 {signers.map((s, i) => {
                   const url = linkTtd(s);
                   const wa = nomorWa(s.contact);
                   const bisaKirim = agreement.status === 'sent' && s.status !== 'signed';
+                  const aksiLink = bisaKirim && (
+                    <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-2">
+                      <code className="text-xs bg-gray-100 px-2 py-1 rounded text-gray-700 break-all flex-1">{url}</code>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button onClick={() => salin(s.id || i, url)}
+                          className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md ${copiedKey === (s.id || i) ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
+                          <Copy className="w-3.5 h-3.5" /> {copiedKey === (s.id || i) ? 'Tersalin' : 'Salin'}
+                        </button>
+                        <a href={url} target="_blank" rel="noopener noreferrer"
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200">
+                          <ExternalLink className="w-3.5 h-3.5" /> Buka
+                        </a>
+                        {wa ? (
+                          <a href={`https://wa.me/${wa}?text=${encodeURIComponent(pesanWa(agreement, s, url))}`} target="_blank" rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-green-600 text-white hover:bg-green-700">
+                            <MessageCircle className="w-3.5 h-3.5" /> Kirim WA
+                          </a>
+                        ) : (
+                          <span className="text-xs text-gray-400" title="No. WhatsApp belum diisi">Kirim WA (no. WA kosong)</span>
+                        )}
+                      </div>
+                    </div>
+                  );
                   return (
                     <div key={s.id || i} className="p-4">
                       <div className="flex flex-wrap items-center gap-2 mb-1">
@@ -300,31 +368,17 @@ export default function AgreementDetail() {
                       {s.status === 'signed' && (
                         <p className="text-xs text-gray-500">
                           {formatDateTime(s.signed_at)}{s.signer_ip ? ` · IP ${s.signer_ip}` : ''}
+                          {s.sign_method ? ` · via link ${s.sign_method === 'bersama' ? 'bersama' : 'pribadi'}` : ''}
+                          {s.statement_at ? ' · pernyataan identitas dicentang' : ''}
                         </p>
                       )}
-                      {bisaKirim && (
-                        <div className="mt-2 flex flex-col sm:flex-row sm:items-center gap-2">
-                          <code className="text-xs bg-gray-100 px-2 py-1 rounded text-gray-700 break-all flex-1">{url}</code>
-                          <div className="flex items-center gap-2 flex-shrink-0">
-                            <button onClick={() => salin(s.id || i, url)}
-                              className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md ${copiedKey === (s.id || i) ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}`}>
-                              <Copy className="w-3.5 h-3.5" /> {copiedKey === (s.id || i) ? 'Tersalin' : 'Salin'}
-                            </button>
-                            <a href={url} target="_blank" rel="noopener noreferrer"
-                              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200">
-                              <ExternalLink className="w-3.5 h-3.5" /> Buka
-                            </a>
-                            {wa ? (
-                              <a href={`https://wa.me/${wa}?text=${encodeURIComponent(pesanWa(agreement, s, url))}`} target="_blank" rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium rounded-md bg-green-600 text-white hover:bg-green-700">
-                                <MessageCircle className="w-3.5 h-3.5" /> Kirim WA
-                              </a>
-                            ) : (
-                              <span className="text-xs text-gray-400" title="No. WhatsApp belum diisi">Kirim WA (no. WA kosong)</span>
-                            )}
-                          </div>
-                        </div>
-                      )}
+                      {/* Mode bersama: link pribadi tetap ada (cadangan), tapi dilipat */}
+                      {aksiLink && (linkBersama ? (
+                        <details className="mt-1">
+                          <summary className="text-xs text-gray-500 cursor-pointer select-none">Link pribadi orang ini</summary>
+                          {aksiLink}
+                        </details>
+                      ) : aksiLink)}
                     </div>
                   );
                 })}
@@ -372,7 +426,9 @@ export default function AgreementDetail() {
               <h3 className="text-lg font-semibold text-gray-900">Kirim Perjanjian</h3>
             </div>
             <p className="text-sm text-gray-600 mb-6">
-              {banyak
+              {banyak && agreement.sign_mode === 'bersama'
+                ? `Setelah dikirim, isi perjanjian dan daftar ${signers.length} ahli waris terkunci. Anda cukup membagikan satu Link Bersama ke grup keluarga — tombolnya muncul di halaman ini.`
+                : banyak
                 ? `Setelah dikirim, isi perjanjian dan daftar penanda tangan terkunci. Setiap penanda tangan (${signers.length} orang) mendapat link masing-masing — kirimkan lewat tombol Kirim WA di halaman ini.`
                 : 'Apakah Anda yakin ingin mengirim perjanjian ini? Setelah dikirim, pemilik properti akan menerima link untuk menandatangani perjanjian secara digital.'}
             </p>

@@ -15,7 +15,9 @@
     "db:migrate:clause-e": "wrangler d1 execute sbp-perjanjian-db --local --file=./migrations/0004_clause_e.sql",
     "db:migrate:clause-e:prod": "wrangler d1 execute sbp-perjanjian-db --remote --file=./migrations/0004_clause_e.sql",
     "db:migrate:signers": "wrangler d1 execute sbp-perjanjian-db --local --file=./migrations/0005_agreement_signers.sql",
-    "db:migrate:signers:prod": "wrangler d1 execute sbp-perjanjian-db --remote --file=./migrations/0005_agreement_signers.sql"
+    "db:migrate:signers:prod": "wrangler d1 execute sbp-perjanjian-db --remote --file=./migrations/0005_agreement_signers.sql",
+    "db:migrate:mode": "wrangler d1 execute sbp-perjanjian-db --local --file=./migrations/0006_mode_ahli_waris.sql",
+    "db:migrate:mode:prod": "wrangler d1 execute sbp-perjanjian-db --remote --file=./migrations/0006_mode_ahli_waris.sql"
   },
   "keywords": [],
   "author": "",

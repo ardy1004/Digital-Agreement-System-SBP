@@ -39,14 +39,77 @@ export function normalisasiSigners(body) {
   return { signers };
 }
 
+const PILIHAN_PAJAK = ['seller', 'buyer', 'agent'];
+const PILIHAN_NOTARIS = ['seller', 'buyer', 'split', 'agent'];
+const teks = (v) => (String(v ?? '').trim() || null);
+
+// Validasi + rapikan semua isian Pihak Kedua untuk create/update draf.
+//   tunggal    : tepat 1 penanda tangan, TTD lewat link pribadi
+//   ahli_waris : 2–10 penanda tangan, nama pewaris wajib,
+//                TTD lewat satu link bersama (default) atau link per orang
+// Klien tanpa owner_mode (format lama) → ditebak dari jumlah penanda tangan.
+export function normalisasiPihakKedua(body) {
+  const hasil = normalisasiSigners(body);
+  if (hasil.error) return hasil;
+  const { signers } = hasil;
+
+  const ownerMode = body?.owner_mode === 'ahli_waris' || (body?.owner_mode === undefined && signers.length > 1)
+    ? 'ahli_waris' : 'tunggal';
+
+  if (ownerMode === 'tunggal' && signers.length !== 1) {
+    return { error: 'Perjanjian pemilik tunggal hanya untuk 1 penanda tangan' };
+  }
+  if (ownerMode === 'ahli_waris' && signers.length < 2) {
+    return { error: 'Perjanjian ahli waris minimal 2 ahli waris' };
+  }
+
+  if (body?.type !== 'margin') {
+    return { error: 'Skema Komisi belum tersedia — teks pasal komisi belum ditentukan' };
+  }
+  if (!PILIHAN_PAJAK.includes(body?.tax_by)) return { error: 'Pilihan pembayar pajak tidak valid' };
+  if (!PILIHAN_NOTARIS.includes(body?.notary_by)) return { error: 'Pilihan penanggung notaris tidak valid' };
+
+  if (ownerMode === 'tunggal') {
+    return {
+      signers, ownerMode, signMode: 'pribadi',
+      decedentName: null, payoutBank: null, payoutAccountNumber: null, payoutAccountHolder: null,
+      heirLetterNumber: null, representativeIndex: null,
+    };
+  }
+
+  const decedentName = teks(body.decedent_name);
+  if (!decedentName) return { error: 'Nama pewaris wajib diisi untuk perjanjian ahli waris' };
+
+  let representativeIndex = null;
+  if (body.representative_index !== undefined && body.representative_index !== null && body.representative_index !== '') {
+    representativeIndex = Number(body.representative_index);
+    if (!Number.isInteger(representativeIndex) || representativeIndex < 0 || representativeIndex >= signers.length) {
+      return { error: 'Perwakilan ahli waris tidak valid' };
+    }
+  }
+
+  return {
+    signers,
+    ownerMode,
+    signMode: body.sign_mode === 'pribadi' ? 'pribadi' : 'bersama',
+    decedentName,
+    payoutBank: teks(body.payout_bank),
+    payoutAccountNumber: teks(body.payout_account_number),
+    payoutAccountHolder: teks(body.payout_account_holder),
+    heirLetterNumber: teks(body.heir_letter_number),
+    representativeIndex,
+  };
+}
+
 // Statement INSERT untuk env.DB.batch(). Penanda tangan #1 memakai token
 // perjanjian — link lama / tombol "Salin Link" lama tetap menunjuk orang yang benar.
-export function insertSignerStatements(db, agreementId, signers, tokenPertama, buatToken) {
+// `ids` dibuat pemanggil supaya perwakilan bisa dirujuk dalam batch yang sama.
+export function insertSignerStatements(db, agreementId, signers, tokenPertama, buatToken, ids) {
   return signers.map((s, i) => db.prepare(`
     INSERT INTO agreement_signers (id, agreement_id, urutan, token, name, nik, address, contact, description)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
   `).bind(
-    crypto.randomUUID(), agreementId, i + 1, i === 0 ? tokenPertama : buatToken(),
+    ids?.[i] || crypto.randomUUID(), agreementId, i + 1, i === 0 ? tokenPertama : buatToken(),
     s.name, s.nik, s.address || null, s.contact || null, s.description || null,
   ));
 }

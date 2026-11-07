@@ -1,6 +1,9 @@
 import SignatureCanvas from 'react-signature-canvas';
 import { formatCurrency, formatDate, formatDateTime, getCurrentDateIndonesian } from '../utils/format';
 import { daftarPenandaTangan, labelPenandaTangan } from '../utils/signers';
+import {
+  adalahAhliWaris, teksHasilBersih, teksPajak, teksNotaris, butirPajak, butirNotaris, butirAhliWaris,
+} from '../utils/klausul';
 
 // Dokumen A4 Surat Perjanjian Kerjasama Pemasaran Properti — HANYA elemen ini
 // yang masuk PDF. Satu sumber untuk halaman TTD (SigningPage) dan "Buat Ulang
@@ -114,7 +117,11 @@ export default function AgreementDocument({
 }) {
   const daftar = daftarPenandaTangan(agreement, signers);
   const banyak = daftar.length > 1;
-  const nettPrice = formatCurrency(agreement?.net_owner_price || 5000000000);
+  // Versi teks pasal (migrasi 0006). Perjanjian lama = 1 → teks dibekukan.
+  const v2 = Number(agreement?.template_version) >= 2;
+  // Fallback 5 M hanya warisan versi 1 (dulu skema Komisi mencetak angka palsu
+  // ini). Versi 2 hanya mengizinkan skema Margin, jadi harga nett selalu ada.
+  const nettPrice = formatCurrency(v2 ? agreement?.net_owner_price : (agreement?.net_owner_price || 5000000000));
   const klausulE = (agreement?.clause_e || '').trim();
   // Tanggal perjanjian dikunci ke tanggal dikirim. Dulu "hari ini" saat halaman
   // dibuka → tiap ahli waris yang TTD di hari berbeda melihat tanggal berbeda.
@@ -283,17 +290,23 @@ export default function AgreementDocument({
         <Butir items={[
           'Pihak Kedua memberikan hak pemasaran eksklusif kepada Pihak Pertama',
           'Pihak Pertama bertanggung jawab atas pemasaran properti',
-          `Pihak Kedua menerima hasil bersih sebesar ${nettPrice}`,
+          v2 ? teksHasilBersih(agreement, nettPrice) : `Pihak Kedua menerima hasil bersih sebesar ${nettPrice}`,
           'Selisih harga menjadi hak Pihak Pertama (Agen)',
         ]} />
       </Pasal>
 
+      {/* Versi 1 = teks yang dibekukan untuk perjanjian lama. JANGAN diubah:
+          perjanjian yang sudah terkirim dirender ulang dari sini. */}
       <Pasal judul="PASAL 4 - KEWAJIBAN PAJAK">
-        <div style={S.para}>Biaya-biaya yang timbul dari transaksi ini menjadi tanggung jawab Pihak Pertama (Agen).</div>
+        <div style={S.para}>
+          {v2 ? teksPajak(agreement) : 'Biaya-biaya yang timbul dari transaksi ini menjadi tanggung jawab Pihak Pertama (Agen).'}
+        </div>
       </Pasal>
 
       <Pasal judul="PASAL 5 - KEWAJIBAN NOTARIS">
-        <div style={S.para}>Biaya notaris dan pengurusan dokumen menjadi tanggung jawab Pihak Pertama (Agen).</div>
+        <div style={S.para}>
+          {v2 ? teksNotaris(agreement) : 'Biaya notaris dan pengurusan dokumen menjadi tanggung jawab Pihak Pertama (Agen).'}
+        </div>
       </Pasal>
 
       <Pasal judul="PASAL 6 - JANGKA WAKTU">
@@ -306,13 +319,19 @@ export default function AgreementDocument({
         {/* Poin e diisi manual admin (kolom clause_e). JANGAN ganti ke additional_clause —
             itu catatan internal berisi harga nett & selisih fee broker. */}
         <div style={S.daftar}>
-          <div style={S.butir}>a. Pihak Kedua menerima hasil bersih sebesar {nettPrice}</div>
+          <div style={S.butir}>a. {v2 ? teksHasilBersih(agreement, nettPrice) : `Pihak Kedua menerima hasil bersih sebesar ${nettPrice}`}</div>
           <div style={S.butir}>b. Selisih harga menjadi hak Pihak Pertama (Agen)</div>
-          <div style={S.butir}>c. Pajak penjual ditanggung Pihak Pertama (Agen)</div>
-          <div style={S.butir}>d. Biaya notaris ditanggung Pihak Pertama (Agen)</div>
+          <div style={S.butir}>c. {v2 ? butirPajak(agreement) : 'Pajak penjual ditanggung Pihak Pertama (Agen)'}</div>
+          <div style={S.butir}>d. {v2 ? butirNotaris(agreement) : 'Biaya notaris ditanggung Pihak Pertama (Agen)'}</div>
           {klausulE && <div style={{ ...S.butir, whiteSpace: 'pre-wrap' }}>e. {klausulE}</div>}
         </div>
       </Pasal>
+
+      {v2 && adalahAhliWaris(agreement) && (
+        <Pasal judul="PASAL 8 - KETENTUAN KHUSUS AHLI WARIS">
+          <Butir items={butirAhliWaris(agreement, daftar)} />
+        </Pasal>
+      )}
 
       {/* PENUTUP + baris TTD pertama = SATU blok PDF: halaman tanda tangan tidak
           pernah berdiri sendiri tanpa teks perjanjian (bisa ditempel ke dokumen lain). */}

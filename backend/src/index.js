@@ -3,9 +3,13 @@ import { cors } from 'hono/cors';
 import { basicAuth } from 'hono/basic-auth';
 import referrals from './referrals.js';
 import {
-  normalisasiSigners, insertSignerStatements, ambilSigners, publicSigner,
+  normalisasiPihakKedua, insertSignerStatements, ambilSigners, publicSigner,
   snapshotSigner, hitungProgres, validasiSignature,
 } from './signers.js';
+
+// Versi teks pasal untuk perjanjian BARU. Perjanjian lama tetap di versinya
+// (lihat migrasi 0006) — teks yang sudah dikirim tidak boleh berubah diam-diam.
+const TEMPLATE_VERSION_SEKARANG = 2;
 
 const app = new Hono();
 
@@ -121,17 +125,19 @@ app.post('/api/agreements', async (c) => {
   const { env } = c;
   const body = await c.req.json();
 
-  const hasil = normalisasiSigners(body);
+  const hasil = normalisasiPihakKedua(body);
   if (hasil.error) return c.json({ success: false, error: hasil.error }, 400);
 
   const id = crypto.randomUUID();
   const token = generateSecureToken();
   const agreementNumber = await generateAgreementNumber(env);
+  const signerIds = hasil.signers.map(() => crypto.randomUUID());
 
   const kolom = {
     id, token, status: 'draft', agreement_number: agreementNumber,
+    template_version: TEMPLATE_VERSION_SEKARANG,
     ...kolomDariBody(body),
-    ...kolomCerminPihak1(hasil.signers, body),
+    ...kolomPihakKedua(hasil, signerIds, null),
   };
   const nama = Object.keys(kolom);
 
@@ -139,7 +145,7 @@ app.post('/api/agreements', async (c) => {
     env.DB.prepare(
       `INSERT INTO agreements (${nama.join(', ')}) VALUES (${nama.map(() => '?').join(', ')})`,
     ).bind(...nama.map((k) => kolom[k])),
-    ...insertSignerStatements(env.DB, id, hasil.signers, token, generateSecureToken),
+    ...insertSignerStatements(env.DB, id, hasil.signers, token, generateSecureToken, signerIds),
   ]);
 
   return c.json({ success: true, data: { id, token, agreement_number: agreementNumber } });
@@ -151,7 +157,7 @@ app.put('/api/agreements/:id', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json();
 
-  const existing = await env.DB.prepare('SELECT status, token FROM agreements WHERE id = ?').bind(id).first();
+  const existing = await env.DB.prepare('SELECT status, token, shared_token FROM agreements WHERE id = ?').bind(id).first();
 
   if (!existing) {
     return c.json({ success: false, error: 'Agreement not found' }, 404);
@@ -161,10 +167,16 @@ app.put('/api/agreements/:id', async (c) => {
     return c.json({ success: false, error: 'Cannot edit agreement after sending' }, 400);
   }
 
-  const hasil = normalisasiSigners(body);
+  const hasil = normalisasiPihakKedua(body);
   if (hasil.error) return c.json({ success: false, error: hasil.error }, 400);
 
-  const kolom = { ...kolomDariBody(body), ...kolomCerminPihak1(hasil.signers, body) };
+  // Draf belum pernah dikirim → aman dinaikkan ke versi teks terbaru
+  const signerIds = hasil.signers.map(() => crypto.randomUUID());
+  const kolom = {
+    template_version: TEMPLATE_VERSION_SEKARANG,
+    ...kolomDariBody(body),
+    ...kolomPihakKedua(hasil, signerIds, existing.shared_token),
+  };
   const nama = Object.keys(kolom);
 
   await env.DB.batch([
@@ -173,7 +185,7 @@ app.put('/api/agreements/:id', async (c) => {
        WHERE id = ? AND status = 'draft'`,
     ).bind(...nama.map((k) => kolom[k]), id),
     env.DB.prepare('DELETE FROM agreement_signers WHERE agreement_id = ?').bind(id),
-    ...insertSignerStatements(env.DB, id, hasil.signers, existing.token, generateSecureToken),
+    ...insertSignerStatements(env.DB, id, hasil.signers, existing.token, generateSecureToken, signerIds),
   ]);
 
   return c.json({ success: true });
@@ -210,7 +222,8 @@ app.post('/api/agreements/:id/send', async (c) => {
     success: true,
     data: {
       token: existing.token,
-      signing_url: '/sign/' + existing.token
+      // Ahli waris + link bersama → link yang dibagikan adalah link bersama
+      signing_url: '/sign/' + (existing.sign_mode === 'bersama' && existing.shared_token ? existing.shared_token : existing.token),
     }
   });
 });
@@ -231,7 +244,12 @@ app.post('/api/agreements/sign/:token', async (c) => {
     return c.json({ success: false, error: 'Agreement not found or link expired' }, 404);
   }
 
-  const { agreement, signers, me } = data;
+  const { agreement, signers, linkMode } = data;
+
+  // Link bersama: penanda tangan memilih namanya sendiri di halaman TTD
+  const me = linkMode === 'bersama'
+    ? signers.find((s) => s.id === body.signer_id)
+    : data.me;
 
   if (agreement.status === 'signed') {
     return c.json({ success: false, error: 'This agreement has already been signed' }, 400);
@@ -241,8 +259,20 @@ app.post('/api/agreements/sign/:token', async (c) => {
     return c.json({ success: false, error: 'Invalid agreement state' }, 400);
   }
 
+  if (!me) {
+    return c.json({ success: false, error: 'Pilih nama Anda terlebih dahulu' }, 400);
+  }
+
   if (me.status === 'signed') {
     return c.json({ success: false, error: 'Anda sudah menandatangani perjanjian ini' }, 400);
+  }
+
+  // Pernyataan identitas wajib di link bersama (satu-satunya pengaman bahwa
+  // yang memilih nama memang orangnya) dan di perjanjian ahli waris versi baru.
+  const wajibPernyataan = linkMode === 'bersama' ||
+    (agreement.owner_mode === 'ahli_waris' && agreement.template_version >= 2);
+  if (wajibPernyataan && body.statement !== true) {
+    return c.json({ success: false, error: 'Pernyataan identitas wajib dicentang' }, 400);
   }
 
   // Tab yang terbuka SEBELUM fitur ini dideploy mengirim format lama
@@ -275,10 +305,15 @@ app.post('/api/agreements/sign/:token', async (c) => {
   const klaim = await env.DB.prepare(`
     UPDATE agreement_signers SET
       status = 'signed', signature_png = ?, signed_at = datetime('now'),
-      signer_ip = ?, signer_user_agent = ?
+      signer_ip = ?, signer_user_agent = ?,
+      sign_method = ?, statement_at = CASE WHEN ? = 1 THEN datetime('now') ELSE NULL END
     WHERE id = ? AND status = 'pending'
       AND (SELECT COUNT(*) FROM agreement_signers WHERE agreement_id = ? AND status = 'signed') = ?
-  `).bind(signature, ip, userAgent, me.id, agreement.id, seen).run();
+  `).bind(
+    signature, ip, userAgent,
+    linkMode, body.statement === true ? 1 : 0,
+    me.id, agreement.id, seen,
+  ).run();
 
   if (!klaim.meta?.changes) return konflikVersi(c);
 
@@ -302,8 +337,10 @@ app.post('/api/agreements/sign/:token', async (c) => {
     ).run();
   }
 
+  // Di link bersama `me` tidak tersimpan di token → kembalikan orang yang baru TTD
   const baru = await muatUntukToken(env, token);
-  return c.json({ success: true, data: tampilanPenandaTangan(baru) });
+  const meBaru = baru.signers.find((s) => s.id === me.id) || baru.me;
+  return c.json({ success: true, data: tampilanPenandaTangan({ ...baru, me: meBaru }) });
 });
 
 // Buat ulang PDF dari TTD yang tersimpan (admin) — cadangan bila browser
@@ -383,10 +420,14 @@ app.all('*', (c) => c.env.ASSETS.fetch(c.req.raw));
 //   additional_clause  — catatan internal (harga nett, selisih fee broker)
 //   document_snapshot  — salinan baris lengkap, termasuk catatan internal
 //   token              — link TTD; di perjanjian multi penanda tangan = link orang lain
+//   shared_token       — link bersama; pemegang link per orang (mode ketat) tidak boleh mendapatkannya
 //   signer_ip / signer_user_agent / pdf_url (key R2)
 const PUBLIC_AGREEMENT_FIELDS = [
   'id', 'agreement_number', 'status', 'type', 'fee_percent', 'net_owner_price',
   'tax_by', 'notary_by', 'clause_e', 'decedent_name',
+  'owner_mode', 'sign_mode', 'template_version',
+  'payout_bank', 'payout_account_number', 'payout_account_holder',
+  'heir_letter_number', 'representative_signer_id',
   'property_title', 'property_land_area', 'property_building_area',
   'property_legal', 'property_address', 'property_maps',
   'party1_name', 'party1_nik', 'party1_address', 'party1_contact', 'party1_description',
@@ -401,25 +442,40 @@ function publicAgreement(row) {
   return out;
 }
 
-// Token → { me, agreement, signers }. Token selalu milik SATU penanda tangan
-// (penanda tangan #1 memakai token perjanjian, lihat migrasi 0005).
+// Token → { me, agreement, signers, linkMode }.
+//   'pribadi' : token milik SATU penanda tangan (penanda tangan #1 memakai token
+//               perjanjian, lihat migrasi 0005) → me = orang itu
+//   'bersama' : agreements.shared_token (ahli waris, satu link untuk semua)
+//               → me = null; penanda tangan memilih namanya di halaman TTD
 async function muatUntukToken(env, token) {
-  const me = await env.DB.prepare('SELECT * FROM agreement_signers WHERE token = ?').bind(token).first();
-  if (!me) return null;
-  const agreement = await env.DB.prepare('SELECT * FROM agreements WHERE id = ?').bind(me.agreement_id).first();
+  let me = await env.DB.prepare('SELECT * FROM agreement_signers WHERE token = ?').bind(token).first();
+  let agreement;
+  let linkMode = 'pribadi';
+
+  if (me) {
+    agreement = await env.DB.prepare('SELECT * FROM agreements WHERE id = ?').bind(me.agreement_id).first();
+  } else {
+    agreement = await env.DB.prepare(
+      "SELECT * FROM agreements WHERE shared_token = ? AND sign_mode = 'bersama'",
+    ).bind(token).first();
+    me = null;
+    linkMode = 'bersama';
+  }
   if (!agreement) return null;
+
   const signers = await ambilSigners(env.DB, agreement.id);
-  return { me, agreement, signers };
+  return { me, agreement, signers, linkMode };
 }
 
 // Respons publik halaman TTD. seen_version = jumlah yang sudah TTD saat dimuat;
 // dikirim balik saat TTD untuk deteksi tabrakan.
-function tampilanPenandaTangan({ me, agreement, signers }) {
+function tampilanPenandaTangan({ me, agreement, signers, linkMode }) {
   const { total, signed } = hitungProgres(signers);
   return {
     ...publicAgreement(agreement),
     signers: signers.map(publicSigner),
-    me_id: me.id,
+    me_id: me?.id ?? null,
+    link_mode: linkMode,
     seen_version: signed,
     signer_total: total,
     signer_signed: signed,
@@ -480,17 +536,29 @@ function kolomDariBody(body) {
   return kolom;
 }
 
+// Kolom Pihak Kedua dari hasil normalisasiPihakKedua().
 // party1_* = cermin penanda tangan #1, supaya Dashboard & kode yang membaca
 // party1_name tetap benar. Sumber kebenaran: tabel agreement_signers.
-function kolomCerminPihak1(signers, body) {
-  const s = signers[0];
+// shared_token hanya ada untuk ahli waris + link bersama; token lama dipakai
+// ulang saat draf diedit supaya link bersama yang sudah disalin tetap sama.
+function kolomPihakKedua(hasil, signerIds, sharedTokenLama) {
+  const s = hasil.signers[0];
+  const bersama = hasil.ownerMode === 'ahli_waris' && hasil.signMode === 'bersama';
   return {
     party1_name: s.name,
     party1_nik: s.nik,
     party1_address: s.address || null,
     party1_contact: s.contact || null,
     party1_description: s.description || null,
-    decedent_name: signers.length > 1 ? (String(body.decedent_name || '').trim() || null) : null,
+    owner_mode: hasil.ownerMode,
+    sign_mode: hasil.signMode,
+    shared_token: bersama ? (sharedTokenLama || generateSecureToken()) : null,
+    decedent_name: hasil.decedentName,
+    payout_bank: hasil.payoutBank,
+    payout_account_number: hasil.payoutAccountNumber,
+    payout_account_holder: hasil.payoutAccountHolder,
+    heir_letter_number: hasil.heirLetterNumber,
+    representative_signer_id: hasil.representativeIndex === null ? null : signerIds[hasil.representativeIndex],
   };
 }
 

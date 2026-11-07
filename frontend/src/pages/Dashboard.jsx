@@ -31,13 +31,14 @@ function toOwnerRow(a) {
     number: a.agreement_number || a.id,
     jenis: `Owner – ${getTypeLabel(a.type)}`,
     status: a.status,
-    // Banyak penanda tangan: link per orang → salin dari halaman detail
-    multi: total > 1,
+    // Banyak penanda tangan + link per orang → salin dari halaman detail.
+    // Mode link bersama → tombol salin menyalin link bersama.
+    multi: total > 1 && !(a.sign_mode === 'bersama' && a.shared_token),
     progres: total > 1 ? `${signed}/${total} TTD` : null,
     nama: total > 1 ? `${a.party1_name || '-'} +${total - 1} lainnya` : a.party1_name,
     createdAt: a.created_at,
     detailPath: `/agreement/${a.id}`,
-    signPath: `/sign/${a.token}`,
+    signPath: `/sign/${a.sign_mode === 'bersama' && a.shared_token ? a.shared_token : a.token}`,
   };
 }
 
