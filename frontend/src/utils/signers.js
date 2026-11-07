@@ -19,7 +19,17 @@ export function daftarPenandaTangan(agreement, signers) {
   }];
 }
 
+// Pihak Kedua = para ahli waris (bukan pemilik bersama)?
+// - owner_mode 'ahli_waris': perjanjian sejak migrasi 0006 (nama pewaris opsional).
+// - decedent_name terisi: perjanjian ahli waris SEBELUM 0006 — migrasi itu tidak
+//   mengisi owner_mode, jadi baris lama tercatat 'tunggal'. Syarat ini wajib tetap
+//   ada, kalau tidak dokumen lama berubah menjadi "para pemilik".
+// Tanpa keduanya + lebih dari 1 penanda tangan = pemilik bersama (hanya data lama).
+export function pihakAhliWaris(agreement) {
+  return agreement?.owner_mode === 'ahli_waris' || Boolean(agreement?.decedent_name);
+}
+
 export function labelPenandaTangan(agreement, total, i) {
   if (total <= 1) return 'Pemilik';
-  return agreement?.decedent_name ? `Ahli Waris ${i + 1}` : `Pemilik ${i + 1}`;
+  return pihakAhliWaris(agreement) ? `Ahli Waris ${i + 1}` : `Pemilik ${i + 1}`;
 }

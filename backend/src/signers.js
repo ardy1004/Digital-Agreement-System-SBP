@@ -45,7 +45,7 @@ const teks = (v) => (String(v ?? '').trim() || null);
 
 // Validasi + rapikan semua isian Pihak Kedua untuk create/update draf.
 //   tunggal    : tepat 1 penanda tangan, TTD lewat link pribadi
-//   ahli_waris : 2–10 penanda tangan, nama pewaris wajib,
+//   ahli_waris : 2–10 penanda tangan, nama pewaris opsional,
 //                TTD lewat satu link bersama (default) atau link per orang
 // Klien tanpa owner_mode (format lama) → ditebak dari jumlah penanda tangan.
 export function normalisasiPihakKedua(body) {
@@ -77,8 +77,9 @@ export function normalisasiPihakKedua(body) {
     };
   }
 
+  // Opsional: dokumen menentukan "ahli waris" dari owner_mode, bukan dari
+  // nama ini (lihat pihakAhliWaris di frontend/src/utils/signers.js).
   const decedentName = teks(body.decedent_name);
-  if (!decedentName) return { error: 'Nama pewaris wajib diisi untuk perjanjian ahli waris' };
 
   let representativeIndex = null;
   if (body.representative_index !== undefined && body.representative_index !== null && body.representative_index !== '') {

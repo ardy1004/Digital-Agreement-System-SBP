@@ -1,6 +1,6 @@
 import SignatureCanvas from 'react-signature-canvas';
 import { formatCurrency, formatDate, formatDateTime, getCurrentDateIndonesian } from '../utils/format';
-import { daftarPenandaTangan, labelPenandaTangan } from '../utils/signers';
+import { daftarPenandaTangan, labelPenandaTangan, pihakAhliWaris } from '../utils/signers';
 import {
   adalahAhliWaris, teksHasilBersih, teksPajak, teksNotaris, butirPajak, butirNotaris, butirAhliWaris,
 } from '../utils/klausul';
@@ -240,13 +240,13 @@ export default function AgreementDocument({
         <>
           <div data-pdf-keep>
             <div style={S.judul}>
-              DATA PIHAK KEDUA ({agreement?.decedent_name ? 'PARA AHLI WARIS' : 'PARA PEMILIK'})
+              DATA PIHAK KEDUA ({pihakAhliWaris(agreement) ? 'PARA AHLI WARIS' : 'PARA PEMILIK'})
             </div>
             <div style={S.para}>
               Yang bertindak sebagai <strong>Pihak Kedua</strong> dalam perjanjian ini adalah{' '}
               {agreement?.decedent_name
                 ? <>para ahli waris dari <strong>{agreement.decedent_name}</strong></>
-                : 'para pemilik bersama berikut'}
+                : pihakAhliWaris(agreement) ? 'para ahli waris berikut' : 'para pemilik bersama berikut'}
               , yang selanjutnya secara bersama-sama disebut <strong>Pihak Kedua</strong>:
             </div>
           </div>

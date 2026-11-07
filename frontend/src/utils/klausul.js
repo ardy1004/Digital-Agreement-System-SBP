@@ -80,7 +80,8 @@ export function butirNotaris(agreement) {
 
 // PASAL 8 — hanya perjanjian ahli waris. Mengembalikan daftar butir (a, b, c…).
 export function butirAhliWaris(agreement, signers) {
-  const pewaris = agreement?.decedent_name || 'pewaris';
+  // Nama pewaris opsional. Kosong → diikat ke pemilik yang tercatat di sertifikat.
+  const pewaris = agreement?.decedent_name || 'pemilik terdaftar atas properti sebagaimana dimaksud dalam Pasal 1';
   const skw = agreement?.heir_letter_number
     ? ` berdasarkan Surat Keterangan Waris Nomor ${agreement.heir_letter_number}`
     : '';

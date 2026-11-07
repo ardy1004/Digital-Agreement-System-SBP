@@ -208,7 +208,6 @@ export default function CreateAgreement() {
       else if (nikTerpakai.has(nik)) e[`signers.${i}.nik`] = 'NIK sama dengan penanda tangan lain';
       nikTerpakai.add(nik);
     });
-    if (ahliWaris && !form.decedent_name.trim()) e.decedent_name = 'Wajib diisi untuk perjanjian ahli waris';
     if (!form.party2_name.trim()) e.party2_name = 'Wajib diisi';
     if (!form.property_title.trim()) e.property_title = 'Wajib diisi';
     if (!form.property_address.trim()) e.property_address = 'Wajib diisi';
@@ -296,9 +295,9 @@ export default function CreateAgreement() {
                       onChange={(e) => aturJumlah(Number(e.target.value))}
                       options={PILIHAN_JUMLAH.map((n) => ({ value: String(n), label: `${n} orang` }))} />
                     <div className="sm:col-span-2">
-                      <Input label="Nama Pewaris" name="decedent_name" value={form.decedent_name} onChange={handleChange} required
+                      <Input label="Nama Pewaris (opsional)" name="decedent_name" value={form.decedent_name} onChange={handleChange}
                         placeholder="Tulis lengkap, mis. Alm. Budi Santoso / Almh. Siti Aminah" />
-                      {errors.decedent_name && <p className="mt-1 text-xs text-red-500">{errors.decedent_name}</p>}
+                      <p className="mt-1 text-xs text-gray-500">Boleh dikosongkan. Dokumen tetap menyebut Pihak Kedua sebagai para ahli waris.</p>
                     </div>
                   </div>
 

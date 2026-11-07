@@ -6,7 +6,7 @@ import { formatCurrency, formatDate, formatDateTime, getStatusBadge, getTypeLabe
 import { IMAGE_URLS, imageUrlToBase64 } from '../utils/referral';
 import { renderPdfBase64 } from '../utils/pdf';
 import AgreementDocument from '../components/AgreementDocument';
-import { daftarPenandaTangan, labelPenandaTangan } from '../utils/signers';
+import { daftarPenandaTangan, labelPenandaTangan, pihakAhliWaris } from '../utils/signers';
 import { ArrowLeft, Copy, Send, Download, ExternalLink, CheckCircle, Clock, FileText, Building2, User, MessageCircle, RefreshCw } from 'lucide-react';
 
 function DetailRow({ label, value }) {
@@ -224,7 +224,7 @@ export default function AgreementDetail() {
                 <p className="text-sm text-gray-700 mb-4">
                   {agreement.decedent_name
                     ? <>Para ahli waris dari <strong>{agreement.decedent_name}</strong></>
-                    : 'Para pemilik bersama'}
+                    : pihakAhliWaris(agreement) ? 'Para ahli waris (nama pewaris tidak dicantumkan)' : 'Para pemilik bersama'}
                 </p>
               )}
               <div className="space-y-4">
