@@ -1,15 +1,17 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { agreementApi, referralApi } from '../utils/api';
+import { agreementApi, referralApi, cobrokerApi } from '../utils/api';
 import { formatDate, getStatusBadge, getTypeLabel } from '../utils/format';
 import { getReferralTypeLabel } from '../utils/referral';
+import { labelSkema } from '../utils/cobroker';
 import { Plus, FileText, Send, CheckCircle, Copy, ExternalLink, RefreshCw, ChevronDown, AlertTriangle } from 'lucide-react';
 
 const KIND_TABS = [
   { key: 'all', label: 'Semua' },
   { key: 'owner', label: 'Owner' },
   { key: 'referal', label: 'Referal' },
+  { key: 'cobroker', label: 'Co-Broker' },
 ];
 
 const STATUS_TABS = [
@@ -53,6 +55,20 @@ function toReferralRow(r) {
     createdAt: r.created_at,
     detailPath: `/referrals/${r.id}`,
     signPath: `/referrals/sign/${r.token}`,
+  };
+}
+
+function toCobrokerRow(c) {
+  return {
+    key: `cobroker-${c.id}`,
+    kind: 'cobroker',
+    number: c.agreement_number || c.id,
+    jenis: `Co-Broker – ${labelSkema(c.share_scheme)}`,
+    status: c.status,
+    nama: c.partner_office ? `${c.partner_name} (${c.partner_office})` : c.partner_name,
+    createdAt: c.created_at,
+    detailPath: `/cobrokers/${c.id}`,
+    signPath: `/cobrokers/sign/${c.token}`,
   };
 }
 
@@ -105,6 +121,10 @@ function CreateMenu() {
             <div className="font-medium">Perjanjian Referal</div>
             <div className="text-xs text-gray-500">Kerja sama referal pembeli / penjual</div>
           </Link>
+          <Link to="/cobrokers/create" className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50">
+            <div className="font-medium">Perjanjian Co-Broker</div>
+            <div className="text-xs text-gray-500">Bagi hasil pendampingan survei</div>
+          </Link>
         </div>
       )}
     </div>
@@ -118,7 +138,7 @@ export default function Dashboard() {
   const [copiedKey, setCopiedKey] = useState(null);
 
   const jenisParam = searchParams.get('jenis');
-  const kindTab = jenisParam === 'owner' || jenisParam === 'referal' ? jenisParam : 'all';
+  const kindTab = KIND_TABS.some((t) => t.key === jenisParam) ? jenisParam : 'all';
   const setKindTab = (key) => setSearchParams(key === 'all' ? {} : { jenis: key }, { replace: true });
 
   const ownerQuery = useQuery({
@@ -133,9 +153,16 @@ export default function Dashboard() {
     ...LIVE_QUERY,
   });
 
+  const cobrokerQuery = useQuery({
+    queryKey: ['cobrokers', undefined],
+    queryFn: () => cobrokerApi.list().then((r) => r.data.data || []),
+    ...LIVE_QUERY,
+  });
+
   const allRows = [
     ...(ownerQuery.data || []).map(toOwnerRow),
     ...(referralQuery.data || []).map(toReferralRow),
+    ...(cobrokerQuery.data || []).map(toCobrokerRow),
   ].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
 
   const kindRows = kindTab === 'all' ? allRows : allRows.filter((r) => r.kind === kindTab);
@@ -144,11 +171,12 @@ export default function Dashboard() {
   const errors = [
     ownerQuery.isError && { what: 'owner', error: ownerQuery.error, retry: ownerQuery.refetch },
     referralQuery.isError && { what: 'referal', error: referralQuery.error, retry: referralQuery.refetch },
+    cobrokerQuery.isError && { what: 'co-broker', error: cobrokerQuery.error, retry: cobrokerQuery.refetch },
   ].filter(Boolean);
 
-  const isLoading = ownerQuery.isLoading || referralQuery.isLoading;
-  const isFetching = ownerQuery.isFetching || referralQuery.isFetching;
-  const refetchAll = () => { ownerQuery.refetch(); referralQuery.refetch(); };
+  const isLoading = ownerQuery.isLoading || referralQuery.isLoading || cobrokerQuery.isLoading;
+  const isFetching = ownerQuery.isFetching || referralQuery.isFetching || cobrokerQuery.isFetching;
+  const refetchAll = () => { ownerQuery.refetch(); referralQuery.refetch(); cobrokerQuery.refetch(); };
 
   const stats = {
     total: kindRows.length,

@@ -9,6 +9,10 @@ import CreateReferral from './pages/referral/CreateReferral';
 import ReferralDetail from './pages/referral/ReferralDetail';
 import ReferralSigningPage from './pages/referral/ReferralSigningPage';
 import ReferralSuccessPage from './pages/referral/ReferralSuccessPage';
+import CreateCobroker from './pages/cobroker/CreateCobroker';
+import CobrokerDetail from './pages/cobroker/CobrokerDetail';
+import CobrokerSigningPage from './pages/cobroker/CobrokerSigningPage';
+import CobrokerSuccessPage from './pages/cobroker/CobrokerSuccessPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -34,6 +38,12 @@ function App() {
           <Route path="/referrals/sign/:token" element={<ReferralSigningPage />} />
           <Route path="/referrals/success/:token" element={<ReferralSuccessPage />} />
           <Route path="/referrals/:id" element={<ReferralDetail />} />
+          <Route path="/cobrokers" element={<Navigate to="/?jenis=cobroker" replace />} />
+          <Route path="/cobrokers/create" element={<CreateCobroker />} />
+          <Route path="/cobrokers/sign/:token" element={<CobrokerSigningPage />} />
+          <Route path="/cobrokers/success/:token" element={<CobrokerSuccessPage />} />
+          <Route path="/cobrokers/:id/edit" element={<CreateCobroker />} />
+          <Route path="/cobrokers/:id" element={<CobrokerDetail />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Router>

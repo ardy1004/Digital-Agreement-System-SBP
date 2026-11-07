@@ -49,4 +49,16 @@ export const referralApi = {
   getPdfUrl: (id) => `/api/referrals/${id}/pdf`,
 };
 
+// Perjanjian Kerja Sama Co-Broker
+export const cobrokerApi = {
+  list: (status) => api.get('/cobrokers', { params: status ? { status } : {} }),
+  get: (id) => api.get(`/cobrokers/${id}`),
+  getByToken: (token) => api.get(`/cobrokers/token/${token}`),
+  create: (data) => api.post('/cobrokers', data),
+  update: (id, data) => api.put(`/cobrokers/${id}`, data),
+  send: (id) => api.post(`/cobrokers/${id}/send`),
+  sign: (token, data) => api.post(`/cobrokers/sign/${token}`, data),
+  getPdfUrl: (id) => `/api/cobrokers/${id}/pdf`,
+};
+
 export default api;

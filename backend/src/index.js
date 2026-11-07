@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { basicAuth } from 'hono/basic-auth';
 import referrals from './referrals.js';
+import cobrokers from './cobrokers.js';
 import {
   normalisasiPihakKedua, insertSignerStatements, ambilSigners, publicSigner,
   snapshotSigner, hitungProgres, validasiSignature,
@@ -24,13 +25,13 @@ app.use('*', cors({
 // menerimanya dari endpoint token (dipakai tombol "Unduh PDF" di halaman sukses).
 const PUBLIC_PATHS = [
   /^\/(sign|success)\/[^/]+\/?$/,
-  /^\/referrals\/(sign|success)\/[^/]+\/?$/,
+  /^\/(referrals|cobrokers)\/(sign|success)\/[^/]+\/?$/,
   /^\/assets\//,
   /^\/img-proxy\//,
   /^\/(favicon|icons)\.svg$/,
   /^\/api\/health$/,
-  /^\/api\/(agreements|referrals)\/(token|sign)\/[^/]+$/,
-  /^\/api\/(agreements|referrals)\/[^/]+\/pdf$/,
+  /^\/api\/(agreements|referrals|cobrokers)\/(token|sign)\/[^/]+$/,
+  /^\/api\/(agreements|referrals|cobrokers)\/[^/]+\/pdf$/,
 ];
 
 const isLocalHost = (host) => /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host || '');
@@ -407,6 +408,9 @@ app.get('/api/agreements/:id/pdf', async (c) => {
 
 // Perjanjian Kerja Sama Referal
 app.route('/api/referrals', referrals);
+
+// Perjanjian Kerja Sama Co-Broker (bagi hasil pendampingan survei)
+app.route('/api/cobrokers', cobrokers);
 
 // API yang tidak dikenal → 404 JSON (bukan halaman React)
 app.all('/api/*', (c) => c.json({ success: false, error: 'Not found' }, 404));
