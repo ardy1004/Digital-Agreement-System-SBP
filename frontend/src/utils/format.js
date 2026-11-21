@@ -41,6 +41,7 @@ export function getStatusBadge(status) {
     draft: { label: 'Draft', color: 'bg-gray-100 text-gray-700' },
     sent: { label: 'Terkirim', color: 'bg-blue-100 text-blue-700' },
     signed: { label: 'Ditandatangani', color: 'bg-green-100 text-green-700' },
+    void: { label: 'Dibatalkan', color: 'bg-red-100 text-red-700' },
   };
   return map[status] || { label: status, color: 'bg-gray-100 text-gray-700' };
 }

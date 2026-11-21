@@ -13,6 +13,11 @@ import CreateCobroker from './pages/cobroker/CreateCobroker';
 import CobrokerDetail from './pages/cobroker/CobrokerDetail';
 import CobrokerSigningPage from './pages/cobroker/CobrokerSigningPage';
 import CobrokerSuccessPage from './pages/cobroker/CobrokerSuccessPage';
+import CreateKuitansi from './pages/kuitansi/CreateKuitansi';
+import KuitansiDetail from './pages/kuitansi/KuitansiDetail';
+import KuitansiSigningPage from './pages/kuitansi/KuitansiSigningPage';
+import KuitansiSuccessPage from './pages/kuitansi/KuitansiSuccessPage';
+import VerifikasiKuitansi from './pages/kuitansi/VerifikasiKuitansi';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -44,6 +49,13 @@ function App() {
           <Route path="/cobrokers/success/:token" element={<CobrokerSuccessPage />} />
           <Route path="/cobrokers/:id/edit" element={<CreateCobroker />} />
           <Route path="/cobrokers/:id" element={<CobrokerDetail />} />
+          <Route path="/kuitansi" element={<Navigate to="/?jenis=kuitansi" replace />} />
+          <Route path="/kuitansi/create" element={<CreateKuitansi />} />
+          <Route path="/kuitansi/sign/:token" element={<KuitansiSigningPage />} />
+          <Route path="/kuitansi/success/:token" element={<KuitansiSuccessPage />} />
+          <Route path="/kuitansi/v/:vt" element={<VerifikasiKuitansi />} />
+          <Route path="/kuitansi/:id/edit" element={<CreateKuitansi />} />
+          <Route path="/kuitansi/:id" element={<KuitansiDetail />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </Router>

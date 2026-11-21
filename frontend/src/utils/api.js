@@ -61,4 +61,23 @@ export const cobrokerApi = {
   getPdfUrl: (id) => `/api/cobrokers/${id}/pdf`,
 };
 
+// Kuitansi digital
+export const kuitansiApi = {
+  list: () => api.get('/kuitansi'),
+  get: (id) => api.get(`/kuitansi/${id}`),
+  create: (data) => api.post('/kuitansi', data),
+  update: (id, data) => api.put(`/kuitansi/${id}`, data),
+  send: (id) => api.post(`/kuitansi/${id}/send`),
+  terbitkan: (id, data) => api.post(`/kuitansi/${id}/terbitkan`, data),
+  batal: (id, alasan) => api.post(`/kuitansi/${id}/batal`, { alasan }),
+  getByToken: (token) => api.get(`/kuitansi/token/${token}`),
+  sign: (token, data) => api.post(`/kuitansi/sign/${token}`, data),
+  verify: (vt) => api.get(`/kuitansi/verify/${vt}`),
+  uploadBukti: (id, dataUrl) => api.post(`/kuitansi/${id}/bukti`, { data_url: dataUrl }),
+  hapusBukti: (id) => api.delete(`/kuitansi/${id}/bukti`),
+  buktiUrlAdmin: (id) => `/api/kuitansi/${id}/bukti`,
+  buktiUrlToken: (token) => `/api/kuitansi/token/${token}/bukti`,
+  getPdfUrl: (id) => `/api/kuitansi/${id}/pdf`,
+};
+
 export default api;

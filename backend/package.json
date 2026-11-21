@@ -19,7 +19,9 @@
     "db:migrate:mode": "wrangler d1 execute sbp-perjanjian-db --local --file=./migrations/0006_mode_ahli_waris.sql",
     "db:migrate:mode:prod": "wrangler d1 execute sbp-perjanjian-db --remote --file=./migrations/0006_mode_ahli_waris.sql",
     "db:migrate:cobroker": "wrangler d1 execute sbp-perjanjian-db --local --file=./migrations/0007_cobroker.sql",
-    "db:migrate:cobroker:prod": "wrangler d1 execute sbp-perjanjian-db --remote --file=./migrations/0007_cobroker.sql"
+    "db:migrate:cobroker:prod": "wrangler d1 execute sbp-perjanjian-db --remote --file=./migrations/0007_cobroker.sql",
+    "db:migrate:kuitansi": "wrangler d1 execute sbp-perjanjian-db --local --file=./migrations/0008_kuitansi.sql",
+    "db:migrate:kuitansi:prod": "wrangler d1 execute sbp-perjanjian-db --remote --file=./migrations/0008_kuitansi.sql"
   },
   "keywords": [],
   "author": "",

@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link, useNavigate, useSearchParams } from 'react-router-dom';
-import { agreementApi, referralApi, cobrokerApi } from '../utils/api';
+import { agreementApi, referralApi, cobrokerApi, kuitansiApi } from '../utils/api';
 import { formatDate, getStatusBadge, getTypeLabel } from '../utils/format';
 import { getReferralTypeLabel } from '../utils/referral';
 import { labelSkema } from '../utils/cobroker';
+import { labelJenis, rp } from '../utils/kuitansi';
 import { Plus, FileText, Send, CheckCircle, Copy, ExternalLink, RefreshCw, ChevronDown, AlertTriangle } from 'lucide-react';
 
 const KIND_TABS = [
@@ -12,6 +13,7 @@ const KIND_TABS = [
   { key: 'owner', label: 'Owner' },
   { key: 'referal', label: 'Referal' },
   { key: 'cobroker', label: 'Co-Broker' },
+  { key: 'kuitansi', label: 'Kuitansi' },
 ];
 
 const STATUS_TABS = [
@@ -19,6 +21,7 @@ const STATUS_TABS = [
   { key: 'draft', label: 'Draft' },
   { key: 'sent', label: 'Terkirim' },
   { key: 'signed', label: 'Ditandatangani' },
+  { key: 'void', label: 'Dibatalkan' },
 ];
 
 // Dashboard memuat ulang sendiri saat tab dibuka lagi & tiap 30 detik (berhenti saat tab tidak aktif)
@@ -69,6 +72,28 @@ function toCobrokerRow(c) {
     createdAt: c.created_at,
     detailPath: `/cobrokers/${c.id}`,
     signPath: `/cobrokers/sign/${c.token}`,
+  };
+}
+
+function toKuitansiRow(k) {
+  const pemilik = k.receiver_mode === 'pemilik';
+  const perluKlien = Number(k.require_payer_sign) === 1;
+  const total = (perluKlien ? 1 : 0) + (pemilik ? 1 : 0);
+  const sudah = (perluKlien && k.payer_signed_at ? 1 : 0) + (pemilik && k.owner_signed_at ? 1 : 0);
+  // Satu-satunya link (klien saja / pemilik saja) bisa disalin dari daftar
+  const satuToken = total === 1 ? (perluKlien ? k.payer_token : k.owner_token) : null;
+  return {
+    key: `kuitansi-${k.id}`,
+    kind: 'kuitansi',
+    number: k.nomor || 'Draf kuitansi',
+    jenis: `Kuitansi – ${labelJenis(k)} ${rp(k.amount)}`,
+    status: k.status,
+    multi: !satuToken,
+    progres: total > 1 ? `${sudah}/${total} TTD` : null,
+    nama: pemilik ? `${k.payer_name} → ${k.owner_name}` : k.payer_name,
+    createdAt: k.created_at,
+    detailPath: `/kuitansi/${k.id}`,
+    signPath: satuToken ? `/kuitansi/sign/${satuToken}` : null,
   };
 }
 
@@ -125,6 +150,10 @@ function CreateMenu() {
             <div className="font-medium">Perjanjian Co-Broker</div>
             <div className="text-xs text-gray-500">Bagi hasil pendampingan survei</div>
           </Link>
+          <Link to="/kuitansi/create" className="block px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 border-t border-gray-100">
+            <div className="font-medium">Kuitansi</div>
+            <div className="text-xs text-gray-500">Booking fee, tanda jadi, DP, pelunasan</div>
+          </Link>
         </div>
       )}
     </div>
@@ -159,10 +188,17 @@ export default function Dashboard() {
     ...LIVE_QUERY,
   });
 
+  const kuitansiQuery = useQuery({
+    queryKey: ['kuitansi', 'daftar'],
+    queryFn: () => kuitansiApi.list().then((r) => r.data.data || []),
+    ...LIVE_QUERY,
+  });
+
   const allRows = [
     ...(ownerQuery.data || []).map(toOwnerRow),
     ...(referralQuery.data || []).map(toReferralRow),
     ...(cobrokerQuery.data || []).map(toCobrokerRow),
+    ...(kuitansiQuery.data || []).map(toKuitansiRow),
   ].sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
 
   const kindRows = kindTab === 'all' ? allRows : allRows.filter((r) => r.kind === kindTab);
@@ -172,11 +208,13 @@ export default function Dashboard() {
     ownerQuery.isError && { what: 'owner', error: ownerQuery.error, retry: ownerQuery.refetch },
     referralQuery.isError && { what: 'referal', error: referralQuery.error, retry: referralQuery.refetch },
     cobrokerQuery.isError && { what: 'co-broker', error: cobrokerQuery.error, retry: cobrokerQuery.refetch },
+    kuitansiQuery.isError && { what: 'kuitansi', error: kuitansiQuery.error, retry: kuitansiQuery.refetch },
   ].filter(Boolean);
 
-  const isLoading = ownerQuery.isLoading || referralQuery.isLoading || cobrokerQuery.isLoading;
-  const isFetching = ownerQuery.isFetching || referralQuery.isFetching || cobrokerQuery.isFetching;
-  const refetchAll = () => { ownerQuery.refetch(); referralQuery.refetch(); cobrokerQuery.refetch(); };
+  const semuaQuery = [ownerQuery, referralQuery, cobrokerQuery, kuitansiQuery];
+  const isLoading = semuaQuery.some((q) => q.isLoading);
+  const isFetching = semuaQuery.some((q) => q.isFetching);
+  const refetchAll = () => semuaQuery.forEach((q) => q.refetch());
 
   const stats = {
     total: kindRows.length,

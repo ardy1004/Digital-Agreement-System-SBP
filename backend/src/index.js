@@ -3,6 +3,7 @@ import { cors } from 'hono/cors';
 import { basicAuth } from 'hono/basic-auth';
 import referrals from './referrals.js';
 import cobrokers from './cobrokers.js';
+import kuitansi from './kuitansi.js';
 import {
   normalisasiPihakKedua, insertSignerStatements, ambilSigners, publicSigner,
   snapshotSigner, hitungProgres, validasiSignature,
@@ -25,13 +26,16 @@ app.use('*', cors({
 // menerimanya dari endpoint token (dipakai tombol "Unduh PDF" di halaman sukses).
 const PUBLIC_PATHS = [
   /^\/(sign|success)\/[^/]+\/?$/,
-  /^\/(referrals|cobrokers)\/(sign|success)\/[^/]+\/?$/,
+  /^\/(referrals|cobrokers|kuitansi)\/(sign|success)\/[^/]+\/?$/,
+  /^\/kuitansi\/v\/[^/]+\/?$/,
   /^\/assets\//,
   /^\/img-proxy\//,
   /^\/(favicon|icons)\.svg$/,
   /^\/api\/health$/,
-  /^\/api\/(agreements|referrals|cobrokers)\/(token|sign)\/[^/]+$/,
-  /^\/api\/(agreements|referrals|cobrokers)\/[^/]+\/pdf$/,
+  /^\/api\/(agreements|referrals|cobrokers|kuitansi)\/(token|sign)\/[^/]+$/,
+  /^\/api\/kuitansi\/token\/[^/]+\/bukti$/,
+  /^\/api\/kuitansi\/verify\/[^/]+$/,
+  /^\/api\/(agreements|referrals|cobrokers|kuitansi)\/[^/]+\/pdf$/,
 ];
 
 const isLocalHost = (host) => /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host || '');
@@ -411,6 +415,9 @@ app.route('/api/referrals', referrals);
 
 // Perjanjian Kerja Sama Co-Broker (bagi hasil pendampingan survei)
 app.route('/api/cobrokers', cobrokers);
+
+// Kuitansi digital (booking fee / tanda jadi / DP / pelunasan)
+app.route('/api/kuitansi', kuitansi);
 
 // API yang tidak dikenal → 404 JSON (bukan halaman React)
 app.all('/api/*', (c) => c.json({ success: false, error: 'Not found' }, 404));

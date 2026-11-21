@@ -49,7 +49,11 @@ export async function renderPdfBase64(docElement, { nomor } = {}) {
   const bawahIsi = [...docElement.children]
     .filter((el) => getComputedStyle(el).position !== 'absolute')
     .reduce((m, el) => Math.max(m, el.getBoundingClientRect().bottom), atasDok);
-  const imgH = Math.min(canvas.height, Math.ceil((bawahIsi - atasDok + JARAK_BAWAH_ISI_PX) * skala));
+  const jarakPx = JARAK_BAWAH_ISI_PX * skala;
+  let imgH = Math.min(canvas.height, Math.ceil((bawahIsi - atasDok) * skala + jarakPx));
+  // Isi muat satu halaman tapi jarak putih di bawahnya tumpah → jarak putihnya
+  // yang dipangkas. Dulu jadi halaman 2 yang KOSONG (pernah: kuitansi pelunasan).
+  if (imgH > halamanPx && imgH - jarakPx <= halamanPx) imgH = halamanPx;
 
   if (imgH <= halamanPx) {
     const printH = (imgH / imgW) * pdfW;
@@ -67,7 +71,13 @@ export async function renderPdfBase64(docElement, { nomor } = {}) {
     };
   });
 
-  for (const [y0, y1] of titikPotong(imgH, halamanPx, blok)) {
+  const potongan = titikPotong(imgH, halamanPx, blok);
+  // Sama untuk dokumen multi-halaman: potongan terakhir yang hanya berisi jarak
+  // putih di bawah isi tidak boleh menjadi halaman kosong.
+  const akhir = potongan[potongan.length - 1];
+  if (potongan.length > 1 && akhir[1] - akhir[0] <= Math.ceil(jarakPx) + 1) potongan.pop();
+
+  for (const [y0, y1] of potongan) {
     const tinggi = y1 - y0;
     if (y0 > 0) pdf.addPage();
     pdf.addImage(potong(canvas, y0, tinggi).toDataURL('image/png'), 'PNG', 0, 0, pdfW, (tinggi / imgW) * pdfW, undefined, 'FAST');
